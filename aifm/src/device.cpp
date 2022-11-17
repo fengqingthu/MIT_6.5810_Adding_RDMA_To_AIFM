@@ -330,4 +330,71 @@ void TCPDevice::_compute(tcpconn_t *remote_slave, uint8_t ds_id, uint8_t opcode,
   }
 }
 
+RDMADevice::RDMADevice(netaddr raddr, uint32_t num_connections,
+                     uint64_t far_mem_size)
+    : TCPDevice(raddr, num_connections, far_mem_size),
+      shared_pool_rdma_queue(NUM_QUEUES) {
+  /* Prepare RDMA client and connect to server. */
+  auto client = start_rdma_client();
+  assert(client != NULL);
+
+  for (int i = 0; i < NUM_QUEUES; i++) {
+    auto queue = rdma_get_queue(client, i);
+    shared_pool_rdma_queue.push(queue);
+  }
+  this->client = client;
+}
+
+RDMADevice::~RDMADevice() {
+  destroy_client(this->client);
+}
+
+void RDMADevice::write_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                               uint16_t data_len, const uint8_t *data_buf) {
+  if (ds_id != kVanillaPtrDSID) {
+    TCPDevice::write_object(ds_id, obj_id_len, obj_id, data_len, data_buf);
+  } else {
+    const uint64_t &offset = *(reinterpret_cast<const uint64_t *>(obj_id));
+    assert(obj_id_len == sizeof(decltype(offset)));
+    _rdma_write(offset, data_len, data_buf);
+  }
+}
+
+void RDMADevice::read_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                              uint16_t *data_len, uint8_t *data_buf) {
+  if (ds_id != kVanillaPtrDSID) {
+    TCPDevice::read_object(ds_id, obj_id_len, obj_id, data_len, data_buf);
+  } else {
+    const uint64_t &offset = *(reinterpret_cast<const uint64_t *>(obj_id));
+    assert(obj_id_len == sizeof(decltype(offset)));
+    _rdma_read(offset, *data_len, data_buf);
+  }
+}
+
+void RDMADevice::_rdma_read(uint64_t offset, uint16_t data_len, uint8_t *data_buf)
+{
+  auto queue = shared_pool_rdma_queue.pop();
+
+  Stats::start_measure_read_object_cycles();
+  if (rdma_read(queue, offset, data_len, data_buf) != 0) {
+    printf("rdma_read failed, obj_id: %ld\n", offset);
+  }
+
+  Stats::finish_measure_read_object_cycles();
+  shared_pool_rdma_queue.push(queue);
+}
+
+void RDMADevice::_rdma_write(uint64_t offset, uint16_t data_len, const uint8_t *data_buf)
+{
+  auto queue = shared_pool_rdma_queue.pop();
+
+  Stats::start_measure_write_object_cycles();
+  if (rdma_write(queue, offset, data_len, data_buf) != 0) {
+    printf("rdma_write failed, obj_id: %ld\n", offset);
+  }
+  Stats::finish_measure_write_object_cycles();
+  
+  shared_pool_rdma_queue.push(queue);
+}
+
 } // namespace far_memory

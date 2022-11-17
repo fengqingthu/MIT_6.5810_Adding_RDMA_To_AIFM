@@ -3,7 +3,7 @@
 extern "C" {
 #include <runtime/tcp.h>
 }
-
+#include "rdma_client.hpp"
 #include "helpers.hpp"
 #include "server.hpp"
 #include "shared_pool.hpp"
@@ -118,6 +118,25 @@ public:
   void compute(uint8_t ds_id, uint8_t opcode, uint16_t input_len,
                const uint8_t *input_buf, uint16_t *output_len,
                uint8_t *output_buf);
+};
+
+/* RDMADevice only overrides the read and write methods, while reusing other TCP's ops. */
+class RDMADevice : public TCPDevice {
+private:
+  struct rdma_client* client;
+  SharedPool<rdma_queue_t *> shared_pool_rdma_queue;
+  void _rdma_read(uint64_t offset, uint16_t data_len, uint8_t *data_buf);
+  void _rdma_write(uint64_t offset, uint16_t data_len, const uint8_t *data_buf);
+
+public:
+
+  RDMADevice(netaddr raddr, uint32_t num_connections, uint64_t far_mem_size);
+  ~RDMADevice();
+
+  void read_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                   uint16_t *data_len, uint8_t *data_buf);
+  void write_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                    uint16_t data_len, const uint8_t *data_buf);
 };
 
 } // namespace far_memory

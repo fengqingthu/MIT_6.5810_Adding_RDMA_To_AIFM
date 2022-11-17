@@ -64,14 +64,16 @@ echo Y | sudo apt-get --fix-broken install
 echo Y | sudo apt-get install libnuma-dev libmnl-dev libnl-3-dev libnl-route-3-dev
 echo Y | sudo apt-get install libcrypto++-dev libcrypto++-doc libcrypto++-utils
 echo Y | sudo apt-get install software-properties-common
-echo Y | sudo apt-get install gcc-9 g++-9 python-pip
+echo Y | sudo apt-get install gcc-9 g++-9 python3-pip
 echo Y | sudo add-apt-repository ppa:ubuntu-toolchain-r/test
 echo Y | sudo apt-get purge cmake
-sudo pip install cmake
+sudo pip3 install scikit-build
+sudo -H pip3 install --upgrade pip
+sudo pip3 install cmake
 ```
 4) Set bash as the default shell.
 ```
-chsh -s /bin/bash
+sudo chsh -s /bin/bash
 ```
 
 ### Build Shenango and AIFM (on all nodes)
@@ -86,6 +88,19 @@ AIFM relies on Shenango's threading and TCP runtime. The `build_all.sh` script i
 After rebooting machines, you have to rerun the script to setup Shenango.
 ```
 sudo ./scripts/setup_machine.sh
+```
+### Setup SSH
+```
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+Copy the public key to the remote node's authorized key list.
+
+### Setup RDMA prerequisites
+```
+sudo apt-get install build-essential libelf-dev cmake
+sudo apt-get install libibverbs1 libibverbs-dev librdmacm1  librdmacm-dev rdmacm-utils ibverbs-utils
+sudo modprobe ib_core
+sudo modprobe rdma_ucm
 ```
 
 ### Configure AIFM (only on the compute node)

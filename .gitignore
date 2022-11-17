@@ -9,3 +9,6 @@ iokerneld
 main
 *.bak
 build
+*DS_Store
+settings.json
+*result*yml

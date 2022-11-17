@@ -1,4 +1,5 @@
-extern "C" {
+extern "C"
+{
 #include <net/ip.h>
 #include <runtime/runtime.h>
 #include <runtime/tcp.h>
@@ -6,6 +7,7 @@ extern "C" {
 }
 #include "thread.h"
 
+#include "rdma_server.hpp"
 #include "device.hpp"
 #include "helpers.hpp"
 #include "object.hpp"
@@ -26,13 +28,15 @@ std::unique_ptr<uint8_t> far_mem;
 
 std::atomic<bool> has_shutdown{true};
 rt::Thread master_thread;
+rt::Thread rdma_thread;
 Server server;
 
 // Request:
 //     |OpCode = Init (1B)|Far Mem Size (8B)|
 // Response:
 //     |Ack (1B)|
-void process_init(tcpconn_t *c) {
+void process_init(tcpconn_t *c)
+{
   uint64_t *far_mem_size;
   uint8_t req[sizeof(decltype(*far_mem_size))];
   helpers::tcp_read_until(c, req, sizeof(req));
@@ -54,13 +58,18 @@ void process_init(tcpconn_t *c) {
 //     |Opcode = Shutdown (1B)|
 // Response:
 //     |Ack (1B)|
-void process_shutdown(tcpconn_t *c) {
+void process_shutdown(tcpconn_t *c)
+{
+  /* Shutdown RDMA server here. */
+  destroy_server();
+
   far_mem.reset();
 
   uint8_t ack;
   helpers::tcp_write_until(c, &ack, sizeof(ack));
 
-  for (auto &thread : slave_threads) {
+  for (auto &thread : slave_threads)
+  {
     thread.Join();
   }
   slave_threads.clear();
@@ -70,7 +79,8 @@ void process_shutdown(tcpconn_t *c) {
 // |Opcode = KOpReadObject(1B) | ds_id(1B) | obj_id_len(1B) | obj_id |
 // Response:
 // |data_len(2B)|data_buf(data_len B)|
-void process_read_object(tcpconn_t *c) {
+void process_read_object(tcpconn_t *c)
+{
   uint8_t
       req[Object::kDSIDSize + Object::kIDLenSize + Object::kMaxObjectIDSize];
   uint8_t resp[Object::kDataLenSize + Object::kMaxObjectDataSize];
@@ -93,7 +103,8 @@ void process_read_object(tcpconn_t *c) {
 // |obj_id(obj_id_len B)|data_buf(data_len)|
 // Response:
 // |Ack (1B)|
-void process_write_object(tcpconn_t *c) {
+void process_write_object(tcpconn_t *c)
+{
   uint8_t req[Object::kDSIDSize + Object::kIDLenSize + Object::kDataLenSize +
               Object::kMaxObjectIDSize + Object::kMaxObjectDataSize];
 
@@ -125,7 +136,8 @@ void process_write_object(tcpconn_t *c) {
 // |Opcode = kOpRemoveObject (1B)|ds_id(1B)|obj_id_len(1B)|obj_id(obj_id_len B)|
 // Response:
 // |exists (1B)|
-void process_remove_object(tcpconn_t *c) {
+void process_remove_object(tcpconn_t *c)
+{
   uint8_t
       req[Object::kDSIDSize + Object::kIDLenSize + Object::kMaxObjectIDSize];
 
@@ -148,7 +160,8 @@ void process_remove_object(tcpconn_t *c) {
 // |param_len(1B)|params(param_len B)|
 // Response:
 // |Ack (1B)|
-void process_construct(tcpconn_t *c) {
+void process_construct(tcpconn_t *c)
+{
   uint8_t ds_type;
   uint8_t ds_id;
   uint8_t param_len;
@@ -177,7 +190,8 @@ void process_construct(tcpconn_t *c) {
 // |Opcode = kOpDeconstruct (1B)|ds_id(1B)|
 // Response:
 // |Ack (1B)|
-void process_destruct(tcpconn_t *c) {
+void process_destruct(tcpconn_t *c)
+{
   uint8_t ds_id;
 
   helpers::tcp_read_until(c, &ds_id, Object::kDSIDSize);
@@ -193,7 +207,8 @@ void process_destruct(tcpconn_t *c) {
 // |input_buf(input_len)|
 // Response:
 // |output_len(2B)|output_buf(output_len B)|
-void process_compute(tcpconn_t *c) {
+void process_compute(tcpconn_t *c)
+{
   uint8_t opcode;
   uint16_t input_len;
   uint8_t req[Object::kDSIDSize + sizeof(opcode) + sizeof(input_len) +
@@ -208,7 +223,8 @@ void process_compute(tcpconn_t *c) {
       *reinterpret_cast<uint16_t *>(&req[Object::kDSIDSize + sizeof(opcode)]);
   assert(input_len <= TCPDevice::kMaxComputeDataLen);
 
-  if (input_len) {
+  if (input_len)
+  {
     helpers::tcp_read_until(
         c, &req[Object::kDSIDSize + sizeof(opcode) + sizeof(input_len)],
         input_len);
@@ -226,13 +242,16 @@ void process_compute(tcpconn_t *c) {
   helpers::tcp_write_until(c, resp, sizeof(*output_len) + *output_len);
 }
 
-void slave_fn(tcpconn_t *c) {
+void slave_fn(tcpconn_t *c)
+{
   // Run event loop.
   uint8_t opcode;
   int ret;
-  while ((ret = tcp_read(c, &opcode, TCPDevice::kOpcodeSize)) > 0) {
+  while ((ret = tcp_read(c, &opcode, TCPDevice::kOpcodeSize)) > 0)
+  {
     BUG_ON(ret != TCPDevice::kOpcodeSize);
-    switch (opcode) {
+    switch (opcode)
+    {
     case TCPDevice::kOpReadObject:
       process_read_object(c);
       break;
@@ -258,7 +277,8 @@ void slave_fn(tcpconn_t *c) {
   tcp_close(c);
 }
 
-void master_fn(tcpconn_t *c) {
+void master_fn(tcpconn_t *c)
+{
   uint8_t opcode;
   helpers::tcp_read_until(c, &opcode, TCPDevice::kOpcodeSize);
   BUG_ON(opcode != TCPDevice::kOpInit);
@@ -271,47 +291,63 @@ void master_fn(tcpconn_t *c) {
   has_shutdown = true;
 }
 
-void do_work(uint16_t port) {
+void do_work(uint16_t port)
+{
+  rdma_thread = rt::Thread([]()
+                           { start_rdma_server(); });
+
   tcpqueue_t *q;
   struct netaddr server_addr = {.ip = 0, .port = port};
   tcp_listen(server_addr, 1, &q);
 
   tcpconn_t *c;
-  while (tcp_accept(q, &c) == 0) {
-    if (has_shutdown) {
-      master_thread = rt::Thread([c]() { master_fn(c); });
+  while (tcp_accept(q, &c) == 0)
+  {
+    if (has_shutdown)
+    {
+      master_thread = rt::Thread([c]()
+                                 { master_fn(c); });
       has_shutdown = false;
-    } else {
-      slave_threads.emplace_back([c]() { slave_fn(c); });
+    }
+    else
+    {
+      slave_threads.emplace_back([c]()
+                                 { slave_fn(c); });
     }
   }
 }
 
 int argc;
 
-void my_main(void *arg) {
+void my_main(void *arg)
+{
   char **argv = static_cast<char **>(arg);
   int port = atoi(argv[1]);
   do_work(port);
 }
 
-int main(int _argc, char *argv[]) {
+int main(int _argc, char *argv[])
+{
   int ret;
 
-  if (_argc < 3) {
+  if (_argc < 3)
+  {
     std::cerr << "usage: [cfg_file] [port]" << std::endl;
     return -EINVAL;
   }
 
   char conf_path[strlen(argv[1]) + 1];
   strcpy(conf_path, argv[1]);
-  for (int i = 2; i < _argc; i++) {
+  for (int i = 2; i < _argc; i++)
+  {
     argv[i - 1] = argv[i];
   }
   argc = _argc - 1;
 
+  // Start TCP server.
   ret = runtime_init(conf_path, my_main, argv);
-  if (ret) {
+  if (ret)
+  {
     std::cerr << "failed to start runtime" << std::endl;
     return ret;
   }
