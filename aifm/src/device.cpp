@@ -3,6 +3,7 @@ extern "C" {
 #include <runtime/storage.h>
 }
 
+#include "rdma_client.h"
 #include "device.hpp"
 #include "object.hpp"
 #include "stats.hpp"
@@ -328,6 +329,38 @@ void TCPDevice::_compute(tcpconn_t *remote_slave, uint8_t ds_id, uint8_t opcode,
     assert(*output_len <= kMaxComputeDataLen);
     helpers::tcp_read_until(remote_slave, output_buf, *output_len);
   }
+}
+
+RDMADevice::RDMADevice(netaddr raddr, uint32_t num_connections,
+                     uint64_t far_mem_size)
+    : TCPDevice(raddr, num_connections, far_mem_size) {
+  /* Prepare RDMA client and connect to server. */
+  int ret = rdma_client_init();
+  if (ret)
+  {
+    rdma_error("failed to start RDMA client, ret = %d \n", ret);
+		exit(1);
+  }
+
+  ret = client_remote_memory_ops();
+	if (ret) {
+		rdma_error("Failed to finish remote memory ops, ret = %d \n", ret);
+		return ret;
+	}
+	if (check_src_dst()) {
+		rdma_error("src and dst buffers do not match \n");
+	} else {
+		printf("...\nSUCCESS, source and destination buffers match \n");
+	}
+}
+
+RDMADevice::~RDMADevice() {
+  /* Disconnect and cleanup. */
+  int ret = client_disconnect_and_clean();
+	if (ret) {
+		rdma_error("Failed to cleanly disconnect and clean up resources \n");
+    exit(1);
+	}
 }
 
 } // namespace far_memory

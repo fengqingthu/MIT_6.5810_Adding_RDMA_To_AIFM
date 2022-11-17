@@ -120,4 +120,24 @@ public:
                uint8_t *output_buf);
 };
 
+/* RDMADevice only overrides the read and write methods, while reusing other TCP's ops. */
+class RDMADevice : public TCPDevice {
+private:
+  void _read_object(tcpconn_t *remote_slave, uint8_t ds_id, uint8_t obj_id_len,
+                    const uint8_t *obj_id, uint16_t *data_len,
+                    uint8_t *data_buf);
+  void _write_object(tcpconn_t *remote_slave, uint8_t ds_id, uint8_t obj_id_len,
+                     const uint8_t *obj_id, uint16_t data_len,
+                     const uint8_t *data_buf);
+
+public:
+
+  RDMADevice(netaddr raddr, uint32_t num_connections, uint64_t far_mem_size);
+  ~RDMADevice();
+  void read_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                   uint16_t *data_len, uint8_t *data_buf);
+  void write_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                    uint16_t data_len, const uint8_t *data_buf);
+};
+
 } // namespace far_memory

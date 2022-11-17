@@ -3,6 +3,7 @@ extern "C" {
 #include <runtime/runtime.h>
 #include <runtime/tcp.h>
 #include <runtime/thread.h>
+#include "rdma_server.h"
 }
 #include "thread.h"
 
@@ -310,11 +311,27 @@ int main(int _argc, char *argv[]) {
   }
   argc = _argc - 1;
 
+  // Start RDMA server.
+  ret = rdma_server_init();
+  if (ret)
+	{
+		rdma_error("failed to start RDMA server, ret = %d \n", ret);
+		return ret;
+	}
+
   ret = runtime_init(conf_path, my_main, argv);
   if (ret) {
     std::cerr << "failed to start runtime" << std::endl;
     return ret;
   }
+
+  // Disconnect and cleanup RDMA server.
+  ret = disconnect_and_cleanup();
+  if (ret)
+	{
+		rdma_error("Failed to clean up resources properly, ret = %d \n", ret);
+		return ret;
+	}
 
   return 0;
 }
