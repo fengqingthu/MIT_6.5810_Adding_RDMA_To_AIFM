@@ -64,14 +64,16 @@ echo Y | sudo apt-get --fix-broken install
 echo Y | sudo apt-get install libnuma-dev libmnl-dev libnl-3-dev libnl-route-3-dev
 echo Y | sudo apt-get install libcrypto++-dev libcrypto++-doc libcrypto++-utils
 echo Y | sudo apt-get install software-properties-common
-echo Y | sudo apt-get install gcc-9 g++-9 python-pip
+echo Y | sudo apt-get install gcc-9 g++-9 python3-pip
 echo Y | sudo add-apt-repository ppa:ubuntu-toolchain-r/test
 echo Y | sudo apt-get purge cmake
-sudo pip install cmake
+sudo pip3 install scikit-build
+sudo -H pip3 install --upgrade pip
+sudo pip3 install cmake
 ```
 4) Set bash as the default shell.
 ```
-chsh -s /bin/bash
+sudo chsh -s /bin/bash
 ```
 
 ### Build Shenango and AIFM (on all nodes)
@@ -87,6 +89,11 @@ After rebooting machines, you have to rerun the script to setup Shenango.
 ```
 sudo ./scripts/setup_machine.sh
 ```
+### Setup SSH
+```
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+Copy the public key to the remote node's authorized key list.
 
 ### Configure AIFM (only on the compute node)
 So far you have built AIFM on both nodes. One node is used as the compute node to run applications, while the other node is used as the remote memory node. Now edit `aifm/configs/ssh` in the compute node; change `MEM_SERVER_SSH_IP` to the IP of the remote memory node (eno49 inet in `ifconfig`), and `MEM_SERVER_SSH_USER` to your ssh username. Please make sure the compute node can ssh the remote memory node successfully without password.
