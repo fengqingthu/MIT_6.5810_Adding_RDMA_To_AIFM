@@ -62,7 +62,7 @@ void process_init(tcpconn_t *c)
 void process_shutdown(tcpconn_t *c)
 {
   /* Shutdown RDMA server here. */
-  destroy_server(rdma_server);
+  destroy_server();
 
   far_mem.reset();
 
@@ -74,7 +74,6 @@ void process_shutdown(tcpconn_t *c)
     thread.Join();
   }
   slave_threads.clear();
-
 }
 
 // Request:
@@ -346,8 +345,12 @@ int main(int _argc, char *argv[])
   /* Start RDMA server, setup connections and then can passively
    * wait for client processing requests as the RDMA backend is
    * client-driven. */
-  rdma_server = start_rdma_server();
-
+  ret = start_rdma_server();
+  if (ret)
+  {
+    std::cerr << "failed to start RDMA server" << std::endl;
+    return ret;
+  }
   // Start TCP server.
   ret = runtime_init(conf_path, my_main, argv);
   if (ret)

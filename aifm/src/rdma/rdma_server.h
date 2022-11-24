@@ -1,5 +1,6 @@
 /**
  * This RDMA server code is heavily adapated from fastswap.
+ * (https://github.com/clusterfarmem/fastswap)
  */
 
 #ifndef RDMA_SERVER_H
@@ -28,7 +29,7 @@
 #include <rdma/rdma_cma.h>
 
 extern const unsigned int NUM_QUEUES = 10;					// Number of cores.
-extern const size_t BUFFER_SIZE = 1024 * 1024 * 1024 * 32l; // 32GB, according to fastswap
+extern const size_t BUFFER_SIZE = 1024 * 1024 * 1024 * 32l; // 32GB by default, according to fastswap
 
 struct device
 {
@@ -39,9 +40,9 @@ struct device
 struct queue
 {
 	struct ibv_qp *qp;
-	struct ibv_cq *cq;
+	struct ibv_cq *cq; // Server side cq is never allocated.
 	struct rdma_cm_id *cm_id;
-	struct ctrl *ctrl;
+	struct rdma_server *server;
 	enum
 	{
 		INIT,
@@ -49,21 +50,21 @@ struct queue
 	} state;
 };
 
-struct ctrl
+/* Server metadata. Need to be destoryed on disconnection. At a time
+ * there should only be one global server instance. */
+struct rdma_server
 {
+	struct rdma_event_channel *ec;
+	struct rdma_cm_id *listener;
+
 	struct queue *queues;
 	struct ibv_mr *mr_buffer;
 	void *buffer;
 	struct device *dev;
 
-	struct ibv_comp_channel *comp_channel;
-};
+	unsigned int queue_ctr = 0;
 
-/* Server metadata. Need to be destoryed on disconnection. */
-struct rdma_server
-{
-	struct rdma_event_channel *ec;
-	struct rdma_cm_id *listener;
+	struct ibv_comp_channel *comp_channel; // Never used on the server side.
 };
 
 struct memregion
@@ -72,18 +73,7 @@ struct memregion
 	uint32_t key;
 };
 
-static void die(const char *reason);
-
-static int alloc_control();
-static int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param);
-static int on_connection(struct queue *q);
-static int on_disconnect(struct queue *q);
-static int on_event(struct rdma_cm_event *event);
-static device *get_device(struct queue *q);
-static void destroy_device(struct ctrl *ctrl);
-static void create_qp(struct queue *q);
-
-static rdma_server *start_rdma_server();
-static void destroy_server(struct rdma_server *server);
+static int start_rdma_server();
+static int destroy_server();
 
 #endif /* RDMA_SERVER_H */
