@@ -89,7 +89,7 @@ int alloc_server()
 	return 0;
 }
 
-static device *get_device(struct queue *q)
+static struct device *get_device(struct queue *q)
 {
 	struct device *dev = NULL;
 
@@ -141,6 +141,7 @@ int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param)
 	struct rdma_conn_param cm_params = {};
 	struct ibv_device_attr attrs = {};
 	struct queue *q = &gserver->queues[gserver->queue_ctr++];
+	memregion_t servermr = {};
 
 	TEST_Z(q->state == queue::INIT);
 	printf("%s\n", __FUNCTION__);
@@ -162,6 +163,12 @@ int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param)
 	printf("param attrs: initiator_depth=%d responder_resources=%d\n",
 		   param->initiator_depth, param->responder_resources);
 
+	/* Send the server buffer metadata using the connection private data. */
+	servermr.baseaddr = (uint64_t)server->mr_buffer->addr;
+	servermr.key = server->mr_buffer->rkey;
+
+	cm_params.private_data = &servermr;
+	cm_params.private_data_len = sizeof(servermr);
 	// the following should hold for initiator_depth:
 	// initiator_depth <= max_qp_init_rd_atom, and
 	// initiator_depth <= param->initiator_depth
@@ -186,7 +193,7 @@ int on_connection(struct queue *q)
 	TEST_Z(q->state == queue::INIT);
 
 	/* Send server side mr metadata on the first established connection. */
-	if (q == &server->queues[0])
+	/* if (q == &server->queues[0])
 	{
 		struct ibv_send_wr wr = {};
 		struct ibv_send_wr *bad_wr = NULL;
@@ -210,7 +217,7 @@ int on_connection(struct queue *q)
 		TEST_NZ(ibv_post_send(q->qp, &wr, &bad_wr));
 
 		// TODO: poll here
-	}
+	} */
 
 	q->state = queue::CONNECTED;
 	return 0;

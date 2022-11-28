@@ -59,6 +59,7 @@ struct rdma_server
 
 	struct queue *queues;
 	struct ibv_mr *mr_buffer;
+
 	void *buffer;
 	struct device *dev;
 
@@ -67,11 +68,12 @@ struct rdma_server
 	struct ibv_comp_channel *comp_channel; // Never used on the server side.
 };
 
-struct memregion
+/* Private data passed over rdma_cm protocol */
+typedef struct
 {
-	uint64_t baseaddr;
-	uint32_t key;
-};
+	uint64_t baseaddr; /* Remote buffer address for RDMA */
+	uint32_t key;	   /* Remote key for RDMA */
+} memregion_t;
 
 static int start_rdma_server();
 static int destroy_server();
