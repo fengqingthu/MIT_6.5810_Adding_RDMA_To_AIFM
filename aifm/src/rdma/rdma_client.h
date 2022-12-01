@@ -29,8 +29,8 @@
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 
-extern static const int SERVER_PORT = 20886; // DEFAULT_RDMA_PORT
-extern static const int NUM_QUEUES = 10;	 // Number of cores.
+extern static int SERVER_PORT = 20886; // DEFAULT_RDMA_PORT
+extern static int NUM_QUEUES = 10;	 // Number of cores.
 
 /* Private data passed over rdma_cm protocol */
 typedef struct
@@ -66,7 +66,7 @@ struct rdma_client
 
 	struct device *rdev; // TODO: move this to queue
 	struct rdma_queue *queues;
-	memregion_t servermr;
+	memregion_t *servermr;
 	struct ibv_comp_channel *comp_channel;
 
 	union

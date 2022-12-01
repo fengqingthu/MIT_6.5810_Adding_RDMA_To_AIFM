@@ -15,8 +15,10 @@ static char clientip[INET_ADDRSTRLEN] = "0.0.0.0";
 #define POLL_BATCH_HIGH (QP_MAX_SEND_WR / 4)
 
 /* APIs. */
-static struct rdma_client *start_rdma_client(char *sip)
+static struct rdma_client *start_rdma_client(char *sip, int num_connections)
 {
+	NUM_QUEUES = num_connections;
+
 	struct rdma_client *gclient = NULL;
 
 	memcpy(serverip, sip, INET_ADDRSTRLEN);
@@ -38,14 +40,14 @@ static int start_client(struct rdma_client **c)
 	struct rdma_client *client;
 	printf("will try to connect to %s:%d\n", serverip, SERVER_PORT);
 
-	*c = malloc(sizeof(struct rdma_client));
+	*c = (struct rdma_client *) malloc(sizeof(struct rdma_client));
 	TEST_Z(*c);
 	client = *c;
 
 	client->ec = rdma_create_event_channel();
 	TEST_Z(client->ec);
 
-	client->queues = malloc(sizeof(struct rdma_queue) * NUM_QUEUES);
+	client->queues = (struct rdma_queue *) malloc(sizeof(struct rdma_queue) * NUM_QUEUES);
 	TEST_Z(client->queues);
 
 	TEST_NZ(parse_ipaddr(&(client->addr_in), serverip));
@@ -171,8 +173,27 @@ static int init_queue(struct rdma_client *client,
 		goto out_destroy_cm_id;
 	}
 
-	/* TODO: fetch private data from established event. */
+	/* Fetch private data from established event. */
+	ret = process_rdma_cm_event(client->ec,
+								RDMA_CM_EVENT_ESTABLISHED,
+								&event);
+	if (ret)
+	{
+		printf("waiting for RDMA_CM_EVENT_ESTABLISHED failed\n");
+		goto out_destroy_cm_id;
+	}
 
+	const memregion_t *rmr = event->param.conn.private_data;
+	if (!client->servermr) {
+		TEST_Z(client->servermr = (memregion_t *) malloc(sizeof(memregion_t)));
+		client->servermr->baseaddr = rmr->baseaddr;
+		client->servermr->key = rmr->key;
+	}
+	printf("servermr baseaddr= %d, key= %d\n", client->servermr->baseaddr, client->servermr->key);
+
+	TEST_NZ(rdma_ack_cm_event(event));
+
+	printf("queue[%d] initialized successfully.\n", idx);
 	return 0;
 
 out_destroy_cm_id:
@@ -259,12 +280,7 @@ static struct device *get_device(struct rdma_queue *q)
 
 	if (!q->client->rdev)
 	{
-		rdev = malloc(sizeof(*rdev));
-		if (!rdev)
-		{
-			printf("no memory for rdev\n");
-			goto out_err;
-		}
+		TEST_Z(rdev = (struct device *) malloc(sizeof(struct device)));
 
 		rdev->verbs = q->cm_id->verbs;
 
