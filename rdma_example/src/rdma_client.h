@@ -29,8 +29,8 @@
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 
-extern static int SERVER_PORT = 20886; // DEFAULT_RDMA_PORT
-extern static int NUM_QUEUES = 10;	 // Number of cores.
+const int SERVER_PORT = 20886; // DEFAULT_RDMA_PORT
+int NUM_QUEUES = 10;	 // Number of cores.
 
 /* Private data passed over rdma_cm protocol */
 typedef struct
@@ -82,7 +82,24 @@ struct rdma_client
 	};
 };
 
-static struct rdma_client *start_rdma_client(char *sip);
+static struct rdma_client *start_rdma_client(char *sip, int num_connections);
 static void destroy_client(struct rdma_client *client);
+
+static int start_client(struct rdma_client **c);
+static int init_queues(struct rdma_client *client);
+static void stop_queue(struct rdma_queue *q);
+static void free_queue(struct rdma_queue *q);
+static int init_queue(struct rdma_client *client, int idx);
+static int connect_to_server(struct rdma_queue *q);
+static void destroy_queue_ib(struct rdma_queue *q);
+static int create_queue_ib(struct rdma_queue *q);
+static struct device *get_device(struct rdma_queue *q);
+static int create_qp(struct rdma_queue *queue);
+static int process_rdma_cm_event(struct rdma_event_channel *echannel,
+								 enum rdma_cm_event_type expected_event,
+								 struct rdma_cm_event **cm_event);
+static void die(const char *reason);
+static int parse_ipaddr(struct sockaddr_in *saddr, char *ip);
+
 
 #endif /* RDMA_CLIENT_H */

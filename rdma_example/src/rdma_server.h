@@ -28,8 +28,8 @@
 #include <unistd.h>
 #include <rdma/rdma_cma.h>
 
-extern const unsigned int NUM_QUEUES = 10;					// Number of cores.
-extern const size_t BUFFER_SIZE = 1024 * 1024 * 1024 * 32l; // 32GB by default, according to fastswap
+const unsigned int NUM_QUEUES = 10;					// Number of cores.
+const size_t BUFFER_SIZE = 1024 * 1024 * 1024 * 32l; // 32GB by default, according to fastswap
 
 struct device
 {
@@ -63,7 +63,7 @@ struct rdma_server
 	void *buffer;
 	struct device *dev;
 
-	unsigned int queue_ctr = 0;
+	unsigned int queue_ctr;
 
 	struct ibv_comp_channel *comp_channel; // Never used on the server side.
 };
@@ -77,5 +77,15 @@ typedef struct
 
 static int start_rdma_server();
 static int destroy_server();
+
+static void die(const char *reason);
+static int alloc_server();
+static struct device *get_device(struct queue *q);
+static void create_qp(struct queue *q);
+static int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param);
+static int on_connection(struct queue *q);
+static int on_disconnect(struct queue *q);
+static int on_event(struct rdma_cm_event *event);
+
 
 #endif /* RDMA_SERVER_H */

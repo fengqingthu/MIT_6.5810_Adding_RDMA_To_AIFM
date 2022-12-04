@@ -12,7 +12,6 @@ static char clientip[INET_ADDRSTRLEN] = "0.0.0.0";
 /* we mainly do send wrs */
 #define QP_MAX_SEND_WR (4096)
 #define CQ_NUM_CQES (QP_MAX_SEND_WR)
-#define POLL_BATCH_HIGH (QP_MAX_SEND_WR / 4)
 
 /* APIs. */
 static struct rdma_client *start_rdma_client(char *sip, int num_connections)
@@ -40,14 +39,15 @@ static int start_client(struct rdma_client **c)
 	struct rdma_client *client;
 	printf("will try to connect to %s:%d\n", serverip, SERVER_PORT);
 
-	*c = (struct rdma_client *) malloc(sizeof(struct rdma_client));
+	*c = (struct rdma_client *)malloc(sizeof(struct rdma_client));
 	TEST_Z(*c);
 	client = *c;
+	memset(client, 0, sizeof(struct rdma_client));
 
 	client->ec = rdma_create_event_channel();
 	TEST_Z(client->ec);
 
-	client->queues = (struct rdma_queue *) malloc(sizeof(struct rdma_queue) * NUM_QUEUES);
+	client->queues = (struct rdma_queue *)malloc(sizeof(struct rdma_queue) * NUM_QUEUES);
 	TEST_Z(client->queues);
 
 	TEST_NZ(parse_ipaddr(&(client->addr_in), serverip));
@@ -93,12 +93,11 @@ static void stop_queue(struct rdma_queue *q)
 static void free_queue(struct rdma_queue *q)
 {
 	rdma_destroy_qp(q->cm_id);
-	ibv_destory_cq(q->cq);
+	ibv_destroy_cq(q->cq);
 	rdma_destroy_id(q->cm_id);
 }
 
-static int init_queue(struct rdma_client *client,
-					  int idx)
+static int init_queue(struct rdma_client *client, int idx)
 {
 	struct rdma_queue *queue;
 	struct rdma_cm_event *event = NULL;
@@ -109,9 +108,9 @@ static int init_queue(struct rdma_client *client,
 	queue = &client->queues[idx];
 	queue->client = client;
 
-	TEST_NZ(rdma_create_id(client->ec, queue->cm_id, NULL, RDMA_PS_TCP));
+	TEST_NZ(rdma_create_id(client->ec, &queue->cm_id, NULL, RDMA_PS_TCP));
 
-	ret = rdma_resolve_addr(queue->cm_id, NULL, &client->addr_in,
+	ret = rdma_resolve_addr(queue->cm_id, NULL, &client->addr,
 							CONNECTION_TIMEOUT_MS);
 	if (ret)
 	{
@@ -130,9 +129,9 @@ static int init_queue(struct rdma_client *client,
 
 	TEST_NZ(rdma_ack_cm_event(event));
 
-	printf("RDMA address is resolved.");
+	printf("RDMA address is resolved.\n");
 
-	ret = rdma_resolve_route(q->cm_id, CONNECTION_TIMEOUT_MS);
+	ret = rdma_resolve_route(queue->cm_id, CONNECTION_TIMEOUT_MS);
 	if (ret)
 	{
 		printf("rdma_resolve_route failed\n");
@@ -150,7 +149,7 @@ static int init_queue(struct rdma_client *client,
 
 	TEST_NZ(rdma_ack_cm_event(event));
 
-	printf("RDMA route is resolved.");
+	printf("RDMA route is resolved.\n");
 
 	struct device *rdev = get_device(queue);
 	if (!rdev)
@@ -183,17 +182,18 @@ static int init_queue(struct rdma_client *client,
 		goto out_destroy_cm_id;
 	}
 
-	const memregion_t *rmr = event->param.conn.private_data;
-	if (!client->servermr) {
-		TEST_Z(client->servermr = (memregion_t *) malloc(sizeof(memregion_t)));
+	if (!client->servermr)
+	{
+		const memregion_t *rmr = event->param.conn.private_data;
+		TEST_Z(client->servermr = (memregion_t *)malloc(sizeof(memregion_t)));
 		client->servermr->baseaddr = rmr->baseaddr;
 		client->servermr->key = rmr->key;
 	}
-	printf("servermr baseaddr= %d, key= %d\n", client->servermr->baseaddr, client->servermr->key);
+	printf("servermr baseaddr= %ld, key= %d\n", client->servermr->baseaddr, client->servermr->key);
 
 	TEST_NZ(rdma_ack_cm_event(event));
 
-	printf("queue[%d] initialized successfully.\n", idx);
+	printf("queue[%d] initialized successfully.\n\n", idx);
 	return 0;
 
 out_destroy_cm_id:
@@ -253,11 +253,12 @@ static int create_queue_ib(struct rdma_queue *q)
 	}
 	printf("completion channel created successfully.\n");
 
-	q->cq = ibv_create_cq(q->client->rdev->verbs /* which device*/,
+	q->cq = ibv_create_cq(q->cm_id->verbs /* which device*/,
 						  CQ_NUM_CQES /* maximum capacity*/,
 						  NULL /* user context, not used here */,
 						  q->client->comp_channel /* which IO completion channel */,
 						  0 /* signaling vector, not used here*/);
+						  
 	TEST_Z(q->cq);
 	TEST_NZ(ibv_req_notify_cq(q->cq, 0));
 
@@ -269,7 +270,7 @@ static int create_queue_ib(struct rdma_queue *q)
 	return 0;
 
 out_destroy_ib_cq:
-	ib_free_cq(q->cq);
+	ibv_destroy_cq(q->cq);
 out_err:
 	return ret;
 }
@@ -280,7 +281,7 @@ static struct device *get_device(struct rdma_queue *q)
 
 	if (!q->client->rdev)
 	{
-		TEST_Z(rdev = (struct device *) malloc(sizeof(struct device)));
+		TEST_Z(rdev = (struct device *)malloc(sizeof(struct device)));
 
 		rdev->verbs = q->cm_id->verbs;
 
@@ -333,9 +334,9 @@ static int create_qp(struct rdma_queue *queue)
 	return ret;
 }
 
-int process_rdma_cm_event(struct rdma_event_channel *echannel,
-						  enum rdma_cm_event_type expected_event,
-						  struct rdma_cm_event **cm_event)
+static int process_rdma_cm_event(struct rdma_event_channel *echannel,
+								 enum rdma_cm_event_type expected_event,
+								 struct rdma_cm_event **cm_event)
 {
 	int ret = 1;
 	ret = rdma_get_cm_event(echannel, cm_event);
@@ -370,7 +371,7 @@ int process_rdma_cm_event(struct rdma_event_channel *echannel,
 
 /* Utils */
 
-void die(const char *reason)
+static void die(const char *reason)
 {
 	fprintf(stderr, "%s - errno: %d\n", reason, errno);
 	exit(EXIT_FAILURE);
@@ -385,7 +386,7 @@ static int parse_ipaddr(struct sockaddr_in *saddr, char *ip)
 
 	if (buflen > INET_ADDRSTRLEN)
 		return -EINVAL;
-	if (in4_pton(ip, buflen, addr, '\0', NULL) == 0)
+	if (inet_pton(AF_INET, ip, addr) == 0)
 		return -EINVAL;
 	saddr->sin_family = AF_INET;
 	return 0;
@@ -416,16 +417,19 @@ struct ibv_mr *buffer_register(struct ibv_pd *pd,
 
 int main(int argc, char **argv)
 {
-	int ret, option;
+	struct rdma_client *client;
+	int option;
 	/* Parse Command Line Arguments */
-	while ((option = getopt(argc, argv, "a:")) != -1) {
-		switch (option) {
-			case 'a':
-				/* remember, this overwrites the port info */
-				ret = start_rdma_client(optarg);
-			
-			default:
-				break;
-			}
+	while ((option = getopt(argc, argv, "a:")) != -1)
+	{
+		switch (option)
+		{
+		case 'a':
+			/* remember, this overwrites the port info */
+			client = start_rdma_client(optarg, 10);
+
+		default:
+			break;
 		}
+	}
 }
