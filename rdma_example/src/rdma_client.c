@@ -1,3 +1,13 @@
+/**
+ * TODO(Qing):
+ * 1. Implement destory_client()
+ * 2. Add support for multi-threading rdma read/write ops and benchmark
+ * 3. Finalize APIs for AIFM integration - start/destory, read/write 
+ * (how to know the size of the obejct?)
+ * 4. Benchmark integrated AIFM
+ * 5. Experiment with async reqs using ibv_req_notify()
+ */
+
 #include "rdma_client.h"
 
 static char serverip[INET_ADDRSTRLEN];
@@ -41,11 +51,11 @@ int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *
 	TEST_Z(rdev);
 
 	client_dst_mr = ibv_reg_mr(rdev->pd,
-									(void *) data_buf,
-									(uint32_t) data_len,
-									(IBV_ACCESS_LOCAL_WRITE |
-									 IBV_ACCESS_REMOTE_WRITE |
-									 IBV_ACCESS_REMOTE_READ));
+							   (void *)data_buf,
+							   (uint32_t)data_len,
+							   (IBV_ACCESS_LOCAL_WRITE |
+								IBV_ACCESS_REMOTE_WRITE |
+								IBV_ACCESS_REMOTE_READ));
 	TEST_Z(client_dst_mr);
 
 	client_send_sge.addr = (uint64_t)client_dst_mr->addr;
@@ -98,11 +108,11 @@ int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t 
 	TEST_Z(rdev);
 
 	client_dst_mr = ibv_reg_mr(rdev->pd,
-									(void *) data_buf,
-									(uint32_t) data_len,
-									(IBV_ACCESS_LOCAL_WRITE |
-									 IBV_ACCESS_REMOTE_WRITE |
-									 IBV_ACCESS_REMOTE_READ));
+							   (void *)data_buf,
+							   (uint32_t)data_len,
+							   (IBV_ACCESS_LOCAL_WRITE |
+								IBV_ACCESS_REMOTE_WRITE |
+								IBV_ACCESS_REMOTE_READ));
 	TEST_Z(client_dst_mr);
 
 	client_send_sge.addr = (uint64_t)client_dst_mr->addr;
@@ -209,7 +219,8 @@ static void free_queue(struct rdma_queue *q)
 	rdma_destroy_qp(q->cm_id);
 	ibv_destroy_cq(q->cq);
 	rdma_destroy_id(q->cm_id);
-	if (q->servermr) {
+	if (q->servermr)
+	{
 		free(q->servermr);
 	}
 }
@@ -512,7 +523,7 @@ int main(int argc, char **argv)
 	const char *text = "TEST";
 	printf("test text: %s\n", text);
 	char *src, *dst;
-	
+
 	src = malloc(strlen(text));
 	TEST_Z(src);
 	memcpy(src, text, strlen(text));
@@ -529,31 +540,35 @@ int main(int argc, char **argv)
 			client = start_rdma_client(optarg, 10);
 			TEST_Z(client);
 
-			for (int i = 0; i < 10; i++) {
+			for (int i = 0; i < 10; i++)
+			{
 				memset(dst, 0, strlen(dst));
 
 				queue = &client->queues[i];
 				ret = rdma_write(queue, strlen(src) * i, strlen(src), src);
-				if (ret) {
+				if (ret)
+				{
 					printf("queue[%d] rdma_write failed, err: %d\n", i, ret);
 					continue;
 				}
 				printf("queue[%d] rdma_write succeed\n", i);
-				
 
 				ret = rdma_read(queue, strlen(src) * i, strlen(src), dst);
-				if (ret) {
+				if (ret)
+				{
 					printf("queue[%d] rdma_write failed, errno: %d\n", i, ret);
 					continue;
 				}
 				printf("queue[%d] rdma_read succeed\n", i);
 
-				if (!memcmp((void*) src, (void*) dst, strlen(src))) {
+				if (!memcmp((void *)src, (void *)dst, strlen(src)))
+				{
 					printf("queue[%d] comparison succeed, text: %s\n", i, dst);
-				} else {
+				}
+				else
+				{
 					printf("queue[%d] comparison failed, dst: %s\n", i, dst);
 				}
-
 			}
 
 		default:
