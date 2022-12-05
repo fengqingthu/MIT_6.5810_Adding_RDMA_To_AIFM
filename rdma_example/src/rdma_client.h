@@ -22,7 +22,7 @@
 #include <getopt.h>
 
 #include <netdb.h>
-#include <netinet/in.h>	
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
@@ -30,7 +30,7 @@
 #include <infiniband/verbs.h>
 
 const int SERVER_PORT = 20886; // DEFAULT_RDMA_PORT
-int NUM_QUEUES = 10;	 // Number of cores.
+int NUM_QUEUES = 10;		   // Number of cores.
 
 /* Private data passed over rdma_cm protocol */
 typedef struct
@@ -51,22 +51,19 @@ struct rdma_queue
 	struct ibv_cq *cq;
 
 	struct rdma_client *client;
+	memregion_t *servermr;
 
 	struct rdma_cm_id *cm_id;
-	enum
-	{
-		INIT,
-		CONNECTED
-	} state;
 };
 
+typedef struct rdma_queue rdma_queue_t;
 struct rdma_client
 {
 	struct rdma_event_channel *ec;
 
 	struct device *rdev; // TODO: move this to queue
 	struct rdma_queue *queues;
-	memregion_t *servermr;
+
 	struct ibv_comp_channel *comp_channel;
 
 	union
@@ -74,16 +71,12 @@ struct rdma_client
 		struct sockaddr addr;
 		struct sockaddr_in addr_in;
 	};
-
-	union
-	{
-		struct sockaddr srcaddr;
-		struct sockaddr_in srcaddr_in;
-	};
 };
 
 static struct rdma_client *start_rdma_client(char *sip, int num_connections);
 static void destroy_client(struct rdma_client *client);
+int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *data_buf);
+int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *data_buf);
 
 static int start_client(struct rdma_client **c);
 static int init_queues(struct rdma_client *client);
@@ -100,6 +93,5 @@ static int process_rdma_cm_event(struct rdma_event_channel *echannel,
 								 struct rdma_cm_event **cm_event);
 static void die(const char *reason);
 static int parse_ipaddr(struct sockaddr_in *saddr, char *ip);
-
 
 #endif /* RDMA_CLIENT_H */

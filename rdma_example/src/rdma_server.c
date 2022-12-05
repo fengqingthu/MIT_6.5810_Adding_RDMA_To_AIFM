@@ -262,5 +262,8 @@ static int on_event(struct rdma_cm_event *event)
 
 int main(int argc, char **argv)
 {
-	return start_rdma_server();
+	start_rdma_server();
+	while (1) {
+		/* Spin. */
+	}
 }
