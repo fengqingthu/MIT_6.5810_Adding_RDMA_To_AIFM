@@ -1,9 +1,9 @@
 extern "C" {
 #include <net/ip.h>
 #include <runtime/storage.h>
+#include "rdma/rdma_client.h"
 }
 
-#include "rdma_client.h"
 #include "device.hpp"
 #include "object.hpp"
 #include "stats.hpp"
@@ -333,34 +333,60 @@ void TCPDevice::_compute(tcpconn_t *remote_slave, uint8_t ds_id, uint8_t opcode,
 
 RDMADevice::RDMADevice(netaddr raddr, uint32_t num_connections,
                      uint64_t far_mem_size)
-    : TCPDevice(raddr, num_connections, far_mem_size) {
+    : TCPDevice(raddr, num_connections, far_mem_size),
+      shared_pool_rdma_queue(NUM_QUEUES) {
   /* Prepare RDMA client and connect to server. */
-  int ret = rdma_client_init();
-  if (ret)
-  {
-    rdma_error("failed to start RDMA client, ret = %d \n", ret);
-		exit(1);
-  }
+  rdma_queue_t *queue;
 
-  ret = client_remote_memory_ops();
-	if (ret) {
-		rdma_error("Failed to finish remote memory ops, ret = %d \n", ret);
-		return ret;
-	}
-	if (check_src_dst()) {
-		rdma_error("src and dst buffers do not match \n");
-	} else {
-		printf("...\nSUCCESS, source and destination buffers match \n");
-	}
+  auto client = start_rdma_client(raddr.ip, NUM_QUEUES);
+  assert(client != NULL);
+  auto queues = rdma_get_queues(client);
+  assert(queues != NULL);
+
+  for (int i = 0; i < NUM_QUEUES; i++) {
+    queue = &queues[i];
+    shared_pool_rdma_queue.push(queue);
+  }
+  this->client = client;
 }
 
 RDMADevice::~RDMADevice() {
-  /* Disconnect and cleanup. */
-  int ret = client_disconnect_and_clean();
-	if (ret) {
-		rdma_error("Failed to cleanly disconnect and clean up resources \n");
-    exit(1);
-	}
+  destroy_client(this->client);
+}
+
+void RDMADevice::write_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                               uint16_t data_len, const uint8_t *data_buf) {
+  // if (ds_id != kVanillaPtrDSID) {
+    TCPDevice::write_object(ds_id, obj_id_len, obj_id, data_len, data_buf);
+  // } else {
+  //   const uint64_t &offset = *(reinterpret_cast<const uint64_t *>(obj_id));
+  //   assert(obj_id_len == sizeof(decltype(offset)));
+  //   _rdma_write(offset, data_len, data_buf);
+  // }
+}
+
+void RDMADevice::read_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
+                              uint16_t *data_len, uint8_t *data_buf) {
+  TCPDevice::read_object(ds_id, obj_id_len, obj_id_len, obj_id, data_len, data_buf);
+}
+
+void RDMADevice::_rdma_read(uint64_t offset, uint16_t data_len, 
+                            uint16_t *data_len, uint8_t *data_buf)
+{
+  auto queue = shared_pool_rdma_queue.pop();
+  if (rdma_read(queue, offset, data_len, data_buf) != 0) {
+    printf("rdma_read failed, obj_id: %ld\n", offset);
+  }
+  shared_pool_rdma_queue.push(queue);
+}
+
+void RDMADevice::_rdma_write(uint64_t offset, uint16_t data_len, uint8_t *data_buf)
+{
+  auto queue = shared_pool_rdma_queue.pop();
+  if (rdma_write(queue, offset, data_len, data_buf) != 0) {
+    printf("rdma_write failed, obj_id: %ld\n", offset);
+  }
+  shared_pool_rdma_queue.push(queue);
 }
 
 } // namespace far_memory

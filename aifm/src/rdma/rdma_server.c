@@ -1,6 +1,7 @@
 #include "rdma_server.h"
 
-/* Global server instance. */
+/* Global server instance. At a time there should be no more than one RDMA
+ server instance. */
 static struct rdma_server *gserver = NULL;
 
 static int start_rdma_server()
@@ -16,12 +17,12 @@ static int start_rdma_server()
 	TEST_NZ(rdma_create_id(gserver->ec, &gserver->listener, NULL, RDMA_PS_TCP));
 	TEST_NZ(rdma_bind_addr(gserver->listener, (struct sockaddr *)&addr));
 	TEST_NZ(rdma_listen(gserver->listener, NUM_QUEUES + 1));
-	printf("listening on port %d.\n", ntohs(rdma_get_src_port(gserver->listener)));
+	printf("\n* AIFM RDMA BACKEND *\nlistening on port %d.\n", ntohs(rdma_get_src_port(gserver->listener)));
 
 	/* Wait for client connections. */
 	for (unsigned int i = 0; i < NUM_QUEUES; ++i)
 	{
-		printf("waiting for queue connection: %d\n", i);
+		printf("\nwaiting for connection num: %d\n", i);
 		struct queue *q = &gserver->queues[i];
 
 		// handle connection requests
@@ -32,13 +33,12 @@ static int start_rdma_server()
 			memcpy(&event_copy, event, sizeof(*event));
 			rdma_ack_cm_event(event);
 
-			if (on_event(&event_copy) || q->state == queue::CONNECTED)
+			if (on_event(&event_copy) || q->state == CONNECTED)
 				break;
 		}
 	}
 
-	printf("done connecting all queues\n");
-
+	printf("%d queues initialized successfully\n\n", NUM_QUEUES);
 	return 0;
 }
 
@@ -46,29 +46,41 @@ static int destroy_server()
 {
 	rdma_destroy_event_channel(gserver->ec);
 	rdma_destroy_id(gserver->listener);
-	TEST_Z(gserver->dev);
-	ibv_dereg_mr(gserver->mr_buffer);
-	free(gserver->buffer);
-	ibv_dealloc_pd(gserver->dev->pd);
-	free(gserver->dev);
-	gserver->dev = NULL;
+	if (gserver->dev)
+	{
+		ibv_dereg_mr(gserver->mr_buffer);
+		ibv_dealloc_pd(gserver->dev->pd);
+		free(gserver->dev);
+		gserver->dev = NULL;
+	}
 
-	// TODO(Qing): free queues.
+	for (int i = 0; i < NUM_QUEUES; i++)
+	{
+		on_disconnect(&gserver->queues[i]);
+	}
+
+	free(gserver->buffer);
+	free(gserver->queues);
+	free(gserver->dev);
+
+	printf("RDMA server cleaned up\n\n");
 	return 0;
 }
 
-void die(const char *reason)
+static void die(const char *reason)
 {
 	fprintf(stderr, "%s - errno: %d\n", reason, errno);
 	exit(EXIT_FAILURE);
 }
 
-int alloc_server()
+static int alloc_server()
 {
 	/* Initialize server struct. */
 	gserver = (struct rdma_server *)malloc(sizeof(struct rdma_server));
 	TEST_Z(gserver);
 	memset(gserver, 0, sizeof(struct rdma_server));
+
+	gserver->queue_ctr = 0;
 
 	gserver->ec = (struct rdma_event_channel *)malloc(sizeof(struct rdma_event_channel));
 	TEST_Z(gserver->ec);
@@ -83,7 +95,7 @@ int alloc_server()
 	for (unsigned int i = 0; i < NUM_QUEUES; ++i)
 	{
 		gserver->queues[i].server = gserver;
-		gserver->queues[i].state = queue::INIT;
+		gserver->queues[i].state = INIT;
 	}
 
 	return 0;
@@ -112,7 +124,8 @@ static struct device *get_device(struct queue *q)
 				   BUFFER_SIZE,
 				   IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ));
 
-		printf("registered memory region of %zu bytes\n", BUFFER_SIZE);
+		printf("registered RDMA memory region of %zu bytes\n", BUFFER_SIZE);
+		printf("baseaddr= %ld, key= %d\n", (uint64_t)server->mr_buffer->addr, server->mr_buffer->rkey);
 		q->server->dev = dev;
 	}
 
@@ -135,7 +148,7 @@ static void create_qp(struct queue *q)
 	q->qp = q->cm_id->qp;
 }
 
-int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param)
+static int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param)
 {
 
 	struct rdma_conn_param cm_params = {};
@@ -143,8 +156,7 @@ int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param)
 	struct queue *q = &gserver->queues[gserver->queue_ctr++];
 	memregion_t servermr = {};
 
-	TEST_Z(q->state == queue::INIT);
-	printf("%s\n", __FUNCTION__);
+	TEST_Z(q->state == INIT);
 
 	id->context = q;
 	q->cm_id = id;
@@ -154,18 +166,18 @@ int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param)
 
 	TEST_NZ(ibv_query_device(dev->verbs, &attrs));
 
-	printf("attrs: max_qp=%d, max_qp_wr=%d, max_cq=%d max_cqe=%d \
-          max_qp_rd_atom=%d, max_qp_init_rd_atom=%d\n",
+	/* printf("attrs: max_qp=%d, max_qp_wr=%d, max_cq=%d max_cqe=%d \
+		  max_qp_rd_atom=%d, max_qp_init_rd_atom=%d\n",
 		   attrs.max_qp,
 		   attrs.max_qp_wr, attrs.max_cq, attrs.max_cqe,
 		   attrs.max_qp_rd_atom, attrs.max_qp_init_rd_atom);
 
 	printf("param attrs: initiator_depth=%d responder_resources=%d\n",
-		   param->initiator_depth, param->responder_resources);
+		   param->initiator_depth, param->responder_resources); */
 
 	/* Send the server buffer metadata using the connection private data. */
-	servermr.baseaddr = (uint64_t)server->mr_buffer->addr;
-	servermr.key = server->mr_buffer->rkey;
+	servermr.baseaddr = (uint64_t)gserver->mr_buffer->addr;
+	servermr.key = gserver->mr_buffer->rkey;
 
 	cm_params.private_data = &servermr;
 	cm_params.private_data_len = sizeof(servermr);
@@ -185,51 +197,21 @@ int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param)
 	return 0;
 }
 
-int on_connection(struct queue *q)
+static int on_connection(struct queue *q)
 {
-	printf("%s\n", __FUNCTION__);
 	struct rdma_server *server = q->server;
 
-	TEST_Z(q->state == queue::INIT);
+	TEST_Z(q->state == INIT);
 
-	/* Send server side mr metadata on the first established connection. */
-	/* if (q == &server->queues[0])
-	{
-		struct ibv_send_wr wr = {};
-		struct ibv_send_wr *bad_wr = NULL;
-		struct ibv_sge sge = {};
-		struct memregion servermr = {};
-
-		printf("connected. sending memory region info.\n");
-		printf("MR key=%u base vaddr=%p\n", server->mr_buffer->rkey, server->mr_buffer->addr);
-
-		servermr.baseaddr = (uint64_t)server->mr_buffer->addr;
-		servermr.key = server->mr_buffer->rkey;
-
-		wr.opcode = IBV_WR_SEND;
-		wr.sg_list = &sge;
-		wr.num_sge = 1;
-		wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
-
-		sge.addr = (uint64_t)&servermr;
-		sge.length = sizeof(servermr);
-
-		TEST_NZ(ibv_post_send(q->qp, &wr, &bad_wr));
-
-		// TODO: poll here
-	} */
-
-	q->state = queue::CONNECTED;
+	q->state = CONNECTED;
 	return 0;
 }
 
-int on_disconnect(struct queue *q)
+static int on_disconnect(struct queue *q)
 {
-	printf("%s\n", __FUNCTION__);
-
-	if (q->state == queue::CONNECTED)
+	if (q->state == CONNECTED)
 	{
-		q->state = queue::INIT;
+		q->state = INIT;
 		rdma_destroy_qp(q->cm_id);
 		rdma_destroy_id(q->cm_id);
 	}
@@ -237,9 +219,8 @@ int on_disconnect(struct queue *q)
 	return 0;
 }
 
-int on_event(struct rdma_cm_event *event)
+static int on_event(struct rdma_cm_event *event)
 {
-	printf("%s\n", __FUNCTION__);
 	struct queue *q = (struct queue *)event->id->context;
 
 	switch (event->event)
