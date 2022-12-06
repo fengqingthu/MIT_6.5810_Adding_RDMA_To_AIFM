@@ -355,18 +355,24 @@ RDMADevice::~RDMADevice() {
 
 void RDMADevice::write_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
                                uint16_t data_len, const uint8_t *data_buf) {
-  // if (ds_id != kVanillaPtrDSID) {
+  if (ds_id != kVanillaPtrDSID) {
     TCPDevice::write_object(ds_id, obj_id_len, obj_id, data_len, data_buf);
-  // } else {
-  //   const uint64_t &offset = *(reinterpret_cast<const uint64_t *>(obj_id));
-  //   assert(obj_id_len == sizeof(decltype(offset)));
-  //   _rdma_write(offset, data_len, data_buf);
-  // }
+  } else {
+    const uint64_t &offset = *(reinterpret_cast<const uint64_t *>(obj_id));
+    assert(obj_id_len == sizeof(decltype(offset)));
+    _rdma_write(offset, data_len, data_buf);
+  }
 }
 
 void RDMADevice::read_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
                               uint16_t *data_len, uint8_t *data_buf) {
-  TCPDevice::read_object(ds_id, obj_id_len, obj_id, data_len, data_buf);
+  if (ds_id != kVanillaPtrDSID) {
+    TCPDevice::read_object(ds_id, obj_id_len, obj_id, data_len, data_buf);
+  } else {
+    const uint64_t &offset = *(reinterpret_cast<const uint64_t *>(obj_id));
+    assert(obj_id_len == sizeof(decltype(offset)));
+    _rdma_read(offset, *data_len, data_buf);
+  }
 }
 
 void RDMADevice::_rdma_read(uint64_t offset, uint16_t data_len, uint8_t *data_buf)

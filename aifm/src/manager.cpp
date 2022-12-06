@@ -275,6 +275,11 @@ void FarMemManager::swap_in(bool nt, GenericFarMemPtr *ptr) {
     auto ds_id = meta.get_ds_id();
     uint16_t obj_data_len;
     auto obj_data_addr = reinterpret_cast<uint8_t *>(obj.get_data_addr());
+    /* If a vanillaPtr, we already know its data_len. Load it into the buffer so
+     that the RDMA backend can notice. */
+    if (ds_id == kVanillaPtrDSID) {
+      obj_data_len = meta.get_object_size() - sizeof(obj_id) - 10 /* Header size. */;
+    }
     device_ptr_->read_object(ds_id, sizeof(obj_id),
                              reinterpret_cast<uint8_t *>(&obj_id),
                              &obj_data_len, obj_data_addr);
