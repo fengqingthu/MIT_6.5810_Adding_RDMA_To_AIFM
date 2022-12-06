@@ -4,10 +4,10 @@ extern "C"
 #include <runtime/runtime.h>
 #include <runtime/tcp.h>
 #include <runtime/thread.h>
-#include "rdma/rdma_server.h"
 }
 #include "thread.h"
 
+#include "rdma_server.hpp"
 #include "device.hpp"
 #include "helpers.hpp"
 #include "object.hpp"

@@ -1,7 +1,6 @@
 extern "C" {
 #include <net/ip.h>
 #include <runtime/storage.h>
-#include "rdma/rdma_client.h"
 }
 
 #include "device.hpp"
@@ -367,11 +366,10 @@ void RDMADevice::write_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *
 
 void RDMADevice::read_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *obj_id,
                               uint16_t *data_len, uint8_t *data_buf) {
-  TCPDevice::read_object(ds_id, obj_id_len, obj_id_len, obj_id, data_len, data_buf);
+  TCPDevice::read_object(ds_id, obj_id_len, obj_id, data_len, data_buf);
 }
 
-void RDMADevice::_rdma_read(uint64_t offset, uint16_t data_len, 
-                            uint16_t *data_len, uint8_t *data_buf)
+void RDMADevice::_rdma_read(uint64_t offset, uint16_t data_len, uint8_t *data_buf)
 {
   auto queue = shared_pool_rdma_queue.pop();
   if (rdma_read(queue, offset, data_len, data_buf) != 0) {
