@@ -1,3 +1,5 @@
+#pragma once
+
 #define TEST_NZ(x)                                            \
 	do                                                        \
 	{                                                         \
@@ -18,16 +20,14 @@
 #include <errno.h>
 #include <getopt.h>
 
-#include <netdb.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 
-#define SERVER_PORT (20886) // DEFAULT_RDMA_PORT
-#define NUM_QUEUES (20)		 // Should be the same as server side number of queues
+#define DEFAULT_RDMA_PORT (20886) // Default port where the RDMA server is listening
+#define NUM_QUEUES (20) // Number of most possible threads.
 #define CONNECTION_TIMEOUT_MS 2000
 #define QP_MAX_RECV_WR 4
 #define QP_MAX_SEND_WR (4096)
@@ -40,7 +40,7 @@ typedef struct
 	uint32_t key;	   /* Remote key for RDMA */
 } memregion_t;
 
-struct device
+struct rdma_device
 {
 	struct ibv_pd *pd;
 	struct ibv_context *verbs;
@@ -63,7 +63,7 @@ struct rdma_client
 	int num_queues;
 	struct rdma_event_channel *ec;
 
-	struct device *rdev; // TODO: move this to queue
+	struct rdma_device *rdev; // TODO: move this to queue
 	struct rdma_queue *queues;
 
 	struct ibv_comp_channel *comp_channel;
@@ -75,11 +75,11 @@ struct rdma_client
 	};
 };
 
-static struct rdma_client *start_rdma_client(uint32_t sip, int num_connections);
-static int destroy_client(struct rdma_client *client);
+struct rdma_client *start_rdma_client(uint32_t sip, int num_connections);
+int destroy_client(struct rdma_client *client);
 rdma_queue_t *rdma_get_queues(struct rdma_client *client);
 int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *data_buf);
-int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *data_buf);
+int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, const uint8_t *data_buf);
 
 static int start_client(struct rdma_client **c, uint32_t sip, int num_connections);
 static int init_queues(struct rdma_client *client);
@@ -89,7 +89,7 @@ static int init_queue(struct rdma_client *client, int idx);
 static int connect_to_server(struct rdma_queue *q);
 static void destroy_queue_ib(struct rdma_queue *q);
 static int create_queue_ib(struct rdma_queue *q);
-static struct device *get_device(struct rdma_queue *q);
+static struct rdma_device *get_device(struct rdma_queue *q);
 static int create_qp(struct rdma_queue *queue);
 static int process_rdma_cm_event(struct rdma_event_channel *echannel,
 								 enum rdma_cm_event_type expected_event,

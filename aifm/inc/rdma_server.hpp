@@ -3,10 +3,9 @@
  * (https://github.com/clusterfarmem/fastswap)
  */
 
-/* Default port where the RDMA server is listening */
-#define DEFAULT_RDMA_PORT (20886)
+#pragma once
 
-#define NUM_QUEUES (20) // Number of most possible threads.
+#include "rdma_client.hpp"
 
 #define TEST_NZ(x)                                            \
 	do                                                        \
@@ -28,12 +27,6 @@
 #include <rdma/rdma_cma.h>
 
 const size_t BUFFER_SIZE = 1024 * 1024 * 1024 * 32l; // 32GB by default, according to fastswap
-
-struct device
-{
-	struct ibv_pd *pd;
-	struct ibv_context *verbs;
-};
 
 struct queue
 {
@@ -59,27 +52,19 @@ struct rdma_server
 	struct ibv_mr *mr_buffer;
 
 	void *buffer;
-	struct device *dev;
+	struct rdma_device *dev;
 
 	unsigned int queue_ctr;
 
 	struct ibv_comp_channel *comp_channel; // Never used on the server side.
 };
 
-/* Private data passed over rdma_cm protocol */
-typedef struct
-{
-	uint64_t baseaddr; /* Remote buffer address for RDMA */
-	uint32_t key;	   /* Remote key for RDMA */
-} memregion_t;
+int start_rdma_server();
+int destroy_server();
 
-static int start_rdma_server();
-static int destroy_server();
-
-static void die(const char *reason);
 static int alloc_server();
-static struct device *get_device(struct queue *q);
-static void create_qp(struct queue *q);
+static struct rdma_device *server_get_device(struct queue *q);
+static void server_create_qp(struct queue *q);
 static int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param);
 static int on_connection(struct queue *q);
 static int on_disconnect(struct queue *q);

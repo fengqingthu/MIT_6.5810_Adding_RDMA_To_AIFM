@@ -30,8 +30,6 @@ std::atomic<bool> has_shutdown{true};
 rt::Thread master_thread;
 Server server;
 
-rdma_server *rdma_server;
-
 // Request:
 //     |OpCode = Init (1B)|Far Mem Size (8B)|
 // Response:

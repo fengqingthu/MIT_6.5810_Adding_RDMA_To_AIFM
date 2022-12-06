@@ -4,7 +4,7 @@
  server instance. */
 static struct rdma_server *gserver = NULL;
 
-static int start_rdma_server()
+int start_rdma_server()
 {
 	struct sockaddr_in addr = {};
 	struct rdma_cm_event *event = NULL;
@@ -42,7 +42,7 @@ static int start_rdma_server()
 	return 0;
 }
 
-static int destroy_server()
+int destroy_server()
 {
 	rdma_destroy_event_channel(gserver->ec);
 	rdma_destroy_id(gserver->listener);
@@ -65,12 +65,6 @@ static int destroy_server()
 
 	printf("RDMA server cleaned up\n\n");
 	return 0;
-}
-
-static void die(const char *reason)
-{
-	fprintf(stderr, "%s - errno: %d\n", reason, errno);
-	exit(EXIT_FAILURE);
 }
 
 static int alloc_server()
@@ -101,13 +95,13 @@ static int alloc_server()
 	return 0;
 }
 
-static struct device *get_device(struct queue *q)
+static struct rdma_device *server_get_device(struct queue *q)
 {
-	struct device *dev = NULL;
+	struct rdma_device *dev = NULL;
 
 	if (!q->server->dev)
 	{
-		dev = (struct device *)malloc(sizeof(*dev));
+		dev = (struct rdma_device *)malloc(sizeof(*dev));
 		TEST_Z(dev);
 		dev->verbs = q->cm_id->verbs;
 		TEST_Z(dev->verbs);
@@ -132,7 +126,7 @@ static struct device *get_device(struct queue *q)
 	return q->server->dev;
 }
 
-static void create_qp(struct queue *q)
+static void server_create_qp(struct queue *q)
 {
 	struct ibv_qp_init_attr qp_attr = {};
 
@@ -161,8 +155,8 @@ static int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *par
 	id->context = q;
 	q->cm_id = id;
 
-	struct device *dev = get_device(q);
-	create_qp(q);
+	struct rdma_device *dev = server_get_device(q);
+	server_create_qp(q);
 
 	TEST_NZ(ibv_query_device(dev->verbs, &attrs));
 

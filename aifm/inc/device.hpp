@@ -3,7 +3,7 @@
 extern "C" {
 #include <runtime/tcp.h>
 }
-
+#include "rdma_client.hpp"
 #include "helpers.hpp"
 #include "server.hpp"
 #include "shared_pool.hpp"
@@ -125,9 +125,8 @@ class RDMADevice : public TCPDevice {
 private:
   struct rdma_client* client;
   SharedPool<rdma_queue_t *> shared_pool_rdma_queue;
-  void _rdma_read(uint64_t offset, uint16_t data_len, 
-                  uint16_t *data_len, uint8_t *data_buf);
-  void _rdma_write(uint64_t offset, uint16_t data_len, uint8_t *data_buf);
+  void _rdma_read(uint64_t offset, uint16_t data_len, uint8_t *data_buf);
+  void _rdma_write(uint64_t offset, uint16_t data_len, const uint8_t *data_buf);
 
 public:
 

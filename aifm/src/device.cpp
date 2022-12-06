@@ -384,7 +384,7 @@ void RDMADevice::_rdma_read(uint64_t offset, uint16_t data_len, uint8_t *data_bu
   shared_pool_rdma_queue.push(queue);
 }
 
-void RDMADevice::_rdma_write(uint64_t offset, uint16_t data_len, uint8_t *data_buf)
+void RDMADevice::_rdma_write(uint64_t offset, uint16_t data_len, const uint8_t *data_buf)
 {
   auto queue = shared_pool_rdma_queue.pop();
   if (rdma_write(queue, offset, data_len, data_buf) != 0) {

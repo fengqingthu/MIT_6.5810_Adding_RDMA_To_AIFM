@@ -11,7 +11,7 @@
 #include "rdma_client.hpp"
 
 /* ====================== APIs ====================== */
-static struct rdma_client *start_rdma_client(uint32_t sip, int num_connections)
+struct rdma_client *start_rdma_client(uint32_t sip, int num_connections)
 {
 	struct rdma_client *gclient = NULL;
 	printf("\n* AIFM RDMA BACKEND *\n");
@@ -29,7 +29,7 @@ int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *
 	struct ibv_mr *client_dst_mr;
 	int ret = -1;
 
-	struct device *rdev = get_device(queue);
+	struct rdma_device *rdev = get_device(queue);
 	TEST_Z(rdev);
 
 	client_dst_mr = ibv_reg_mr(rdev->pd,
@@ -79,7 +79,7 @@ int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *
 	return 0;
 }
 
-int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *data_buf)
+int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, const uint8_t *data_buf)
 {
 	struct ibv_wc wc;
 	struct ibv_sge client_send_sge;
@@ -87,7 +87,7 @@ int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t 
 	struct ibv_mr *client_send_mr;
 	int ret = -1;
 
-	struct device *rdev = get_device(queue);
+	struct rdma_device *rdev = get_device(queue);
 	TEST_Z(rdev);
 
 	client_send_mr = ibv_reg_mr(rdev->pd,
@@ -137,7 +137,7 @@ int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t 
 	return 0;
 }
 
-static int destroy_client(struct rdma_client *client)
+int destroy_client(struct rdma_client *client)
 {
 	struct rdma_queue *queue;
 
@@ -191,11 +191,11 @@ static int start_client(struct rdma_client **c, uint32_t sip, int num_connection
 	memset(client->queues, 0, sizeof(struct rdma_queue) * client->num_queues);
 
 	client->addr_in.sin_addr.s_addr = sip;
-	client->addr_in.sin_port = htons(SERVER_PORT);
+	client->addr_in.sin_port = htons(DEFAULT_RDMA_PORT);
 
 	char str[INET_ADDRSTRLEN];
 	TEST_NZ(inet_ntop(AF_INET, &client->addr_in, str, INET_ADDRSTRLEN));
-	printf("will try to connect to %s:%d\n", str, SERVER_PORT);
+	printf("will try to connect to %s:%d\n", str, DEFAULT_RDMA_PORT);
 
 	return init_queues(client);
 }
@@ -245,7 +245,7 @@ static int init_queue(struct rdma_client *client, int idx)
 {
 	struct rdma_queue *queue;
 	struct rdma_cm_event *event = NULL;
-	struct device *rdev;
+	struct rdma_device *rdev;
 	int ret;
 
 	// printf("start: %s[%d]\n", __FUNCTION__, idx);
@@ -411,13 +411,13 @@ out_err:
 	return ret;
 }
 
-static struct device *get_device(struct rdma_queue *q)
+static struct rdma_device *get_device(struct rdma_queue *q)
 {
-	struct device *rdev = NULL;
+	struct rdma_device *rdev = NULL;
 
 	if (!q->client->rdev)
 	{
-		TEST_Z(rdev = (struct device *)malloc(sizeof(struct device)));
+		TEST_Z(rdev = (struct rdma_device *)malloc(sizeof(struct rdma_device)));
 
 		rdev->verbs = q->cm_id->verbs;
 
@@ -443,7 +443,7 @@ out_err:
 
 static int create_qp(struct rdma_queue *queue)
 {
-	struct device *rdev = queue->client->rdev;
+	struct rdma_device *rdev = queue->client->rdev;
 	struct ibv_qp_init_attr init_attr;
 	int ret;
 
