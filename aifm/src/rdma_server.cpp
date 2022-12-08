@@ -1,11 +1,98 @@
 #include "rdma_server.hpp"
 
+#include <rdma/rdma_cma.h>
+
+#define TEST_NZ(x)                                            \
+	do                                                        \
+	{                                                         \
+		if ((x))                                              \
+			die("error: " #x " failed (returned non-zero)."); \
+	} while (0)
+#define TEST_Z(x)                                              \
+	do                                                         \
+	{                                                          \
+		if (!(x))                                              \
+			die("error: " #x " failed (returned zero/null)."); \
+	} while (0)
+
 /* Global server instance. At a time there should be no more than one RDMA
  server instance. */
 static struct rdma_server *gserver = NULL;
 
+/* Private data passed over rdma_cm protocol */
+typedef struct
+{
+	uint64_t baseaddr; /* Remote buffer address for RDMA */
+	uint32_t key;	   /* Remote key for RDMA */
+} memregion_t;
+
+struct rdma_device
+{
+	struct ibv_pd *pd;
+	struct ibv_context *verbs;
+};
+
+const size_t BUFFER_SIZE = 1024 * 1024 * 1024 * 16l; // 16GB by default
+
+struct queue
+{
+	struct ibv_qp *qp;
+	struct ibv_cq *cq; // Server side cq is never allocated.
+	struct rdma_cm_id *cm_id;
+	struct rdma_server *server;
+	enum
+	{
+		INIT,
+		CONNECTED
+	} state;
+};
+
+/* Server metadata. Need to be destoryed on disconnection. At a time
+ * there should only be one global server instance. */
+struct rdma_server
+{
+	struct rdma_event_channel *ec;
+	struct rdma_cm_id *listener;
+
+	struct queue *queues;
+	struct ibv_mr *mr_buffer;
+
+	void *buffer;
+	struct rdma_device *dev;
+
+	unsigned int queue_ctr;
+
+	struct ibv_comp_channel *comp_channel; // Never used on the server side.
+};
+
+static int alloc_server();
+static struct rdma_device *server_get_device(struct queue *q);
+static void server_create_qp(struct queue *q);
+static int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *param);
+static int on_connection(struct queue *q);
+static int on_disconnect(struct queue *q);
+static int on_event(struct rdma_cm_event *event);
+static void die(const char *reason);
+
+/* ===================== Utils ==================== */
+
+static void die(const char *reason)
+{
+	fprintf(stderr, "%s - errno: %d\n", reason, errno);
+	exit(EXIT_FAILURE);
+}
+/* ===================== APIs ==================== */
+/** Start RDMA server, setup connections and then passively
+ * wait for client processing requests as the RDMA backend is
+ * client-driven. */
 int start_rdma_server()
 {
+	if (gserver != NULL)
+	{
+		printf("rdma_server already started\n");
+		return 0;
+	}
+
 	struct sockaddr_in addr = {};
 	struct rdma_cm_event *event = NULL;
 	addr.sin_family = AF_INET;				  /* standard IP NET address */
@@ -25,7 +112,6 @@ int start_rdma_server()
 		printf("\nwaiting for connection num: %d\n", i);
 		struct queue *q = &gserver->queues[i];
 
-		// handle connection requests
 		while (rdma_get_cm_event(gserver->ec, &event) == 0)
 		{
 			struct rdma_cm_event event_copy;
@@ -44,6 +130,12 @@ int start_rdma_server()
 
 int destroy_server()
 {
+	if (gserver == NULL)
+	{
+		printf("trying to destory null rdma_server\n");
+		return -1;
+	}
+
 	rdma_destroy_event_channel(gserver->ec);
 	rdma_destroy_id(gserver->listener);
 	if (gserver->dev)
@@ -66,6 +158,8 @@ int destroy_server()
 	printf("RDMA server cleaned up\n\n");
 	return 0;
 }
+
+/* ===================== RDMA Helpers ==================== */
 
 static int alloc_server()
 {

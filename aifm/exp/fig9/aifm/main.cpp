@@ -220,7 +220,7 @@ public:
     BUG_ON(madvise(all_gen_keys, sizeof(all_gen_keys), MADV_HUGEPAGE) != 0);
     manager.reset(FarMemManagerFactory::build(
         kCacheSize, kNumGCThreads,
-        new TCPDevice(raddr, kNumConnections, kFarMemSize)));
+        new RDMADevice(raddr, kNumConnections, kFarMemSize)));
     auto hopscotch = std::unique_ptr<GenericConcurrentHopscotch>(
         manager->allocate_concurrent_hopscotch_heap(
             kLocalHashTableNumEntriesShift, kRemoteHashTableNumEntriesShift,

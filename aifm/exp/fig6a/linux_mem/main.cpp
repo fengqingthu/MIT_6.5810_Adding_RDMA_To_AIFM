@@ -349,7 +349,7 @@ public:
     std::unique_ptr<FarMemManager> manager =
         std::unique_ptr<FarMemManager>(FarMemManagerFactory::build(
             kCacheSize, kNumGCThreads,
-            new TCPDevice(raddr, kNumConnections, kFarMemSize)));
+            new RDMADevice(raddr, kNumConnections, kFarMemSize)));
     do_work(manager.get());
   }
 };

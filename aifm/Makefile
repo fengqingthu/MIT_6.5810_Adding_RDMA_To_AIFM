@@ -1,3 +1,5 @@
+LINUX_PATH = /usr/lib/x86_64-linux-gnu/
+
 SHENANGO_PATH=../shenango
 include $(SHENANGO_PATH)/shared.mk
 
@@ -116,7 +118,9 @@ tcp_device_server_obj = $(tcp_device_server_src:.cpp=.o)
 
 override CXXFLAGS += -std=gnu++2a -fconcepts -Wno-unused-function
 CXXFLAGS := $(filter-out -std=gnu++17,$(CXXFLAGS))
-override LDFLAGS += -lnuma
+
+RDMACM_PATH = $(SHENANGO_PATH)/rdma-core/build/lib/statics/
+override LDFLAGS += -lnuma -L ${RDMACM_PATH} -lrdmacm -libverbs
 
 all: bin/test_pointer_noswap bin/test_pointer_swap bin/test_pointer_concurrent bin/test_array_add bin/test_array_nt \
 bin/test_array_clock_replacement bin/tcp_device_server bin/tcp_device_server bin/test_tcp_pointer_swap \

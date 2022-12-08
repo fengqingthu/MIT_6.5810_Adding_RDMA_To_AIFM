@@ -28,6 +28,7 @@ std::unique_ptr<uint8_t> far_mem;
 
 std::atomic<bool> has_shutdown{true};
 rt::Thread master_thread;
+rt::Thread rdma_thread;
 Server server;
 
 // Request:
@@ -292,6 +293,9 @@ void master_fn(tcpconn_t *c)
 
 void do_work(uint16_t port)
 {
+  rdma_thread = rt::Thread([]()
+                           { start_rdma_server(); });
+
   tcpqueue_t *q;
   struct netaddr server_addr = {.ip = 0, .port = port};
   tcp_listen(server_addr, 1, &q);
@@ -340,15 +344,6 @@ int main(int _argc, char *argv[])
   }
   argc = _argc - 1;
 
-  /* Start RDMA server, setup connections and then can passively
-   * wait for client processing requests as the RDMA backend is
-   * client-driven. */
-  ret = start_rdma_server();
-  if (ret)
-  {
-    std::cerr << "failed to start RDMA server" << std::endl;
-    return ret;
-  }
   // Start TCP server.
   ret = runtime_init(conf_path, my_main, argv);
   if (ret)

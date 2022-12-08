@@ -95,6 +95,14 @@ ssh-keygen -t ed25519 -C "your_email@example.com"
 ```
 Copy the public key to the remote node's authorized key list.
 
+### Setup RDMA prerequisites
+```
+sudo apt-get install build-essential libelf-dev cmake
+sudo apt-get install libibverbs1 libibverbs-dev librdmacm1  librdmacm-dev rdmacm-utils ibverbs-utils
+sudo modprobe ib_core
+sudo modprobe rdma_ucm
+```
+
 ### Configure AIFM (only on the compute node)
 So far you have built AIFM on both nodes. One node is used as the compute node to run applications, while the other node is used as the remote memory node. Now edit `aifm/configs/ssh` in the compute node; change `MEM_SERVER_SSH_IP` to the IP of the remote memory node (eno49 inet in `ifconfig`), and `MEM_SERVER_SSH_USER` to your ssh username. Please make sure the compute node can ssh the remote memory node successfully without password.
 

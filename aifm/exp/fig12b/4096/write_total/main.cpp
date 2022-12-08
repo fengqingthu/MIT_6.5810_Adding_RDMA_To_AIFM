@@ -61,7 +61,7 @@ public:
     std::unique_ptr<FarMemManager> manager =
         std::unique_ptr<FarMemManager>(FarMemManagerFactory::build(
             kCacheSize, kNumGCThreads,
-            new TCPDevice(raddr, kNumConnections, kFarMemSize)));
+            new RDMADevice(raddr, kNumConnections, kFarMemSize)));
     for (uint64_t i = 0; i < kNumEntries; i++) {
       ptrs[i] = std::move(manager->allocate_unique_ptr<Data_t>());
     }
