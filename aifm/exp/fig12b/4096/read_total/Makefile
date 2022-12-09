@@ -18,12 +18,12 @@ dep = $(obj:.o=.d)
 
 CXXFLAGS := $(filter-out -std=gnu++17,$(CXXFLAGS))
 override CXXFLAGS += -std=gnu++2a -fconcepts -Wno-unused-function -mcmodel=medium
-
+RDMACM_PATH = $(SHENANGO_PATH)/rdma-core/build/lib/statics/
 #must be first
 all: main
 
 main: $(main_obj) $(librt_libs) $(RUNTIME_DEPS) $(main_obj) $(lib_obj)
-	$(LDXX) -o $@ $(LDFLAGS) $(main_obj) $(lib_obj) $(librt_libs) $(RUNTIME_LIBS)
+	$(LDXX) -o $@ $(LDFLAGS) $(main_obj) $(lib_obj) $(librt_libs) $(RUNTIME_LIBS) -L $(RDMACM_PATH) -lrdmacm -libverbs
 
 ifneq ($(MAKECMDGOALS),clean)
 -include $(dep)   # include all dep files in the makefile

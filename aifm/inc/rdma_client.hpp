@@ -9,8 +9,8 @@
 
 #include <infiniband/verbs.h>
 
-#define DEFAULT_RDMA_PORT (20886)				// Default port where the RDMA server is listening
-#define NUM_QUEUES (20)							// Number of most possible concurrent calls
+#define DEFAULT_RDMA_PORT (20886) // Default port where the RDMA server is listening
+#define NUM_QUEUES (160)          // Number of most possible concurrent calls
 
 struct rdma_queue;
 typedef struct rdma_queue rdma_queue_t;

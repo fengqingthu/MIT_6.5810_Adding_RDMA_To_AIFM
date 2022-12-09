@@ -116,7 +116,7 @@ void do_work(netaddr raddr) {
   std::unique_ptr<FarMemManager> manager =
       std::unique_ptr<FarMemManager>(FarMemManagerFactory::build(
           kCacheSize, kNumGCThreads,
-          new RDMADevice(raddr, kNumConnections, kFarMemSize)));
+          new TCPDevice(raddr, kNumConnections, kFarMemSize)));
   for (uint32_t i = 0; i < kNumCompressedFiles; i++) {
     fm_array_ptrs[i].reset(
         manager->allocate_array_heap<snappy::FileBlock,

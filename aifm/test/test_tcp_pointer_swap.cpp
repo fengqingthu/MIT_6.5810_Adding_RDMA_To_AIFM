@@ -70,7 +70,7 @@ void _main(void *arg) {
   std::unique_ptr<FarMemManager> manager =
       std::unique_ptr<FarMemManager>(FarMemManagerFactory::build(
           kCacheSize, kNumGCThreads,
-          new RDMADevice(raddr, kNumConnections, kFarMemSize)));
+          new TCPDevice(raddr, kNumConnections, kFarMemSize)));
   do_work(manager.get());
 }
 

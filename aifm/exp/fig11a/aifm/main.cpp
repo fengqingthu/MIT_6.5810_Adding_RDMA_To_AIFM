@@ -114,7 +114,7 @@ void fm_compress_files_bench(const string &in_file_path,
 void do_work(netaddr raddr) {
   auto manager = std::unique_ptr<FarMemManager>(FarMemManagerFactory::build(
       kCacheSize, kNumGCThreads,
-      new RDMADevice(raddr, kNumConnections, kFarMemSize)));
+      new TCPDevice(raddr, kNumConnections, kFarMemSize)));
   for (uint32_t i = 0; i < kNumUncompressedFiles; i++) {
     fm_array_ptrs[i].reset(
         manager->allocate_array_heap<snappy::FileBlock,

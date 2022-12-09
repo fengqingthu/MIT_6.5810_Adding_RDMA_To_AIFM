@@ -364,7 +364,7 @@ void _main(void* arg)
     auto raddr = helpers::str_to_netaddr(ip_addr_port);
     std::unique_ptr<FarMemManager> manager =
         std::unique_ptr<FarMemManager>(FarMemManagerFactory::build(
-            kCacheSize, kNumGCThreads, new RDMADevice(raddr, kNumConnections, kFarMemSize)));
+            kCacheSize, kNumGCThreads, new TCPDevice(raddr, kNumConnections, kFarMemSize)));
     do_work(manager.get());
 }
 

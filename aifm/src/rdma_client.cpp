@@ -17,7 +17,7 @@
 
 #include "rdma_client.hpp"
 
-const char *RDMA_SERVER_IP = "128.110.218.126"; // IP that the RDMA server is listening on
+const char *RDMA_SERVER_IP = "128.110.218.157"; // IP that the RDMA server is listening on
 
 #define CONNECTION_TIMEOUT_MS 2000
 #define QP_MAX_RECV_WR 4
@@ -210,14 +210,15 @@ int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, const ui
 
 int destroy_client(struct rdma_client *client)
 {
+	printf("start: %s\n", __FUNCTION__);
 	struct rdma_queue *queue;
 
 	for (int i = 0; i < client->num_queues; i++)
 	{
 		queue = &client->queues[i];
-		// rdma_disconnect(queue->cm_id); // Server will already be shut down anyway.
-		rdma_destroy_id(queue->cm_id);
+		rdma_disconnect(queue->cm_id);
 		destroy_queue_ib(queue);
+		rdma_destroy_id(queue->cm_id);
 		free(queue->servermr);
 	}
 
@@ -254,6 +255,7 @@ static int start_client(struct rdma_client **c, const char *sip, int num_connect
 	memset(client, 0, sizeof(struct rdma_client));
 
 	client->num_queues = num_connections;
+
 	client->ec = rdma_create_event_channel();
 	TEST_Z(client->ec);
 
@@ -262,6 +264,7 @@ static int start_client(struct rdma_client **c, const char *sip, int num_connect
 	memset(client->queues, 0, sizeof(struct rdma_queue) * client->num_queues);
 
 	printf("will try to connect to %s:%d\n", sip, DEFAULT_RDMA_PORT);
+	printf("target num of queues: %d\n", client->num_queues);
 
 	TEST_NZ(parse_ipaddr(&(client->addr_in), sip));
 	client->addr_in.sin_port = htons(DEFAULT_RDMA_PORT);
@@ -445,7 +448,8 @@ static int connect_to_server(struct rdma_queue *q)
 static void destroy_queue_ib(struct rdma_queue *q)
 {
 	rdma_destroy_qp(q->cm_id);
-	ibv_destroy_cq(q->cq);
+	/* NOTE(Qing): There is a bug here that sporadically ibv_destroy_cq never returns. */
+	// ibv_destroy_cq(q->cq);
 }
 
 static int create_queue_ib(struct rdma_queue *q)
@@ -465,7 +469,7 @@ static int create_queue_ib(struct rdma_queue *q)
 						  0 /* signaling vector, not used here*/);
 
 	TEST_Z(q->cq);
-	TEST_NZ(ibv_req_notify_cq(q->cq, 0));
+	// TEST_NZ(ibv_req_notify_cq(q->cq, 0));
 	// printf("completion queue created at %p with %d elements \n", q->cq, q->cq->cqe);
 
 	ret = create_qp(q);

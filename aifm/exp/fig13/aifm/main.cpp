@@ -78,7 +78,7 @@ void do_work(void *arg) {
   std::unique_ptr<FarMemManager> manager =
       std::unique_ptr<FarMemManager>(FarMemManagerFactory::build(
           kCacheSize, kNumGCThreads,
-          new RDMADevice(raddr, kNumConnections, kFarMemSize)));
+          new TCPDevice(raddr, kNumConnections, kFarMemSize)));
   auto fm_array = std::unique_ptr<Array<Data_t, kNumEntries>>(
       manager->allocate_array_heap<Data_t, kNumEntries>());
 

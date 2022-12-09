@@ -25,7 +25,7 @@ RDMACM_PATH = $(SHENANGO_PATH)/rdma-core/build/lib/statics/
 all: main
 
 main: $(main_obj) $(librt_libs) $(RUNTIME_DEPS) $(main_obj) $(lib_obj)
-	$(LDXX) -o $@ $(LDFLAGS) $(main_obj) $(lib_obj) $(librt_libs) $(RUNTIME_LIBS) -L ${RDMACM_PATH} -lrdmacm -libverbs
+	$(LDXX) -o $@ $(LDFLAGS) $(main_obj) $(lib_obj) $(librt_libs) $(RUNTIME_LIBS) -L $(RDMACM_PATH) -lrdmacm -libverbs
 
 ifneq ($(MAKECMDGOALS),clean)
 -include $(dep)   # include all dep files in the makefile

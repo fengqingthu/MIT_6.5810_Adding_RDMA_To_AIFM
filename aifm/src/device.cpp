@@ -373,20 +373,24 @@ void RDMADevice::read_object(uint8_t ds_id, uint8_t obj_id_len, const uint8_t *o
 
 void RDMADevice::_rdma_read(uint64_t offset, uint16_t data_len, uint8_t *data_buf)
 {
+  Stats::start_measure_read_object_cycles();
   auto queue = shared_pool_rdma_queue.pop();
   if (rdma_read(queue, offset, data_len, data_buf) != 0) {
     printf("rdma_read failed, obj_id: %ld\n", offset);
   }
   shared_pool_rdma_queue.push(queue);
+  Stats::finish_measure_read_object_cycles();
 }
 
 void RDMADevice::_rdma_write(uint64_t offset, uint16_t data_len, const uint8_t *data_buf)
 {
+  Stats::start_measure_write_object_cycles();
   auto queue = shared_pool_rdma_queue.pop();
   if (rdma_write(queue, offset, data_len, data_buf) != 0) {
     printf("rdma_write failed, obj_id: %ld\n", offset);
   }
   shared_pool_rdma_queue.push(queue);
+  Stats::finish_measure_write_object_cycles();
 }
 
 } // namespace far_memory
