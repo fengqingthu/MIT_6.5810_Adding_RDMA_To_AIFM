@@ -335,7 +335,7 @@ RDMADevice::RDMADevice(netaddr raddr, uint32_t num_connections,
     : TCPDevice(raddr, num_connections, far_mem_size),
       shared_pool_rdma_queue(NUM_QUEUES) {
   /* Prepare RDMA client and connect to server. */
-  auto client = start_rdma_client(raddr.ip, NUM_QUEUES);
+  auto client = start_rdma_client();
   assert(client != NULL);
 
   for (int i = 0; i < NUM_QUEUES; i++) {

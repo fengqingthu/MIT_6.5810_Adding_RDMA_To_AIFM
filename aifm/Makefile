@@ -1,5 +1,3 @@
-LINUX_PATH = /usr/lib/x86_64-linux-gnu/
-
 SHENANGO_PATH=../shenango
 include $(SHENANGO_PATH)/shared.mk
 

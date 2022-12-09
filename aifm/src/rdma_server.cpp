@@ -155,6 +155,7 @@ int destroy_server()
 	free(gserver->queues);
 	free(gserver->dev);
 
+	gserver = NULL;
 	printf("RDMA server cleaned up\n\n");
 	return 0;
 }
@@ -287,8 +288,6 @@ static int on_connect_request(struct rdma_cm_id *id, struct rdma_conn_param *par
 
 static int on_connection(struct queue *q)
 {
-	struct rdma_server *server = q->server;
-
 	TEST_Z(q->state == queue::INIT);
 
 	q->state = queue::CONNECTED;

@@ -17,6 +17,8 @@
 
 #include "rdma_client.hpp"
 
+const char *RDMA_SERVER_IP = "128.110.218.126"; // IP that the RDMA server is listening on
+
 #define CONNECTION_TIMEOUT_MS 2000
 #define QP_MAX_RECV_WR 4
 #define QP_MAX_SEND_WR (4096)
@@ -63,7 +65,7 @@ struct rdma_client
 	};
 };
 
-static int start_client(struct rdma_client **c, uint32_t sip, int num_connections);
+static int start_client(struct rdma_client **c, const char *sip, int num_connections);
 static int init_queues(struct rdma_client *client);
 static void stop_queue(struct rdma_queue *q);
 static void free_queue(struct rdma_queue *q);
@@ -77,15 +79,16 @@ static int process_rdma_cm_event(struct rdma_event_channel *echannel,
 								 enum rdma_cm_event_type expected_event,
 								 struct rdma_cm_event **cm_event);
 static void die(const char *reason);
+static int parse_ipaddr(struct sockaddr_in *saddr, const char *ip);
 
 /* ====================== APIs ====================== */
-struct rdma_client *start_rdma_client(uint32_t sip, int num_connections)
+struct rdma_client *start_rdma_client()
 {
 	struct rdma_client *gclient = NULL;
 	printf("\n* AIFM RDMA BACKEND *\n");
 
-	TEST_NZ(start_client(&gclient, sip, num_connections));
-	printf("%d queues initialized successfully\n\n", num_connections);
+	TEST_NZ(start_client(&gclient, RDMA_SERVER_IP, NUM_QUEUES));
+	printf("%d queues initialized successfully\n\n", NUM_QUEUES);
 	return gclient;
 }
 
@@ -241,7 +244,7 @@ rdma_queue_t *rdma_get_queue(struct rdma_client *client, int idx)
 
 /* ===================== RDMA Helpers ===================== */
 
-static int start_client(struct rdma_client **c, uint32_t sip, int num_connections)
+static int start_client(struct rdma_client **c, const char *sip, int num_connections)
 {
 	struct rdma_client *client;
 
@@ -258,12 +261,10 @@ static int start_client(struct rdma_client **c, uint32_t sip, int num_connection
 	TEST_Z(client->queues);
 	memset(client->queues, 0, sizeof(struct rdma_queue) * client->num_queues);
 
-	client->addr_in.sin_addr.s_addr = sip;
-	client->addr_in.sin_port = htons(DEFAULT_RDMA_PORT);
+	printf("will try to connect to %s:%d\n", sip, DEFAULT_RDMA_PORT);
 
-	char str[INET_ADDRSTRLEN];
-	TEST_NZ(inet_ntop(AF_INET, &client->addr_in, str, INET_ADDRSTRLEN));
-	printf("will try to connect to %s:%d\n", str, DEFAULT_RDMA_PORT);
+	TEST_NZ(parse_ipaddr(&(client->addr_in), sip));
+	client->addr_in.sin_port = htons(DEFAULT_RDMA_PORT);
 
 	return init_queues(client);
 }
@@ -475,7 +476,6 @@ static int create_queue_ib(struct rdma_queue *q)
 
 out_destroy_ib_cq:
 	ibv_destroy_cq(q->cq);
-out_err:
 	return ret;
 }
 
@@ -501,11 +501,8 @@ static struct rdma_device *get_device(struct rdma_queue *q)
 
 	return q->client->rdev;
 
-out_free_pd:
-	ibv_dealloc_pd(rdev->pd);
 out_free_dev:
 	free(rdev);
-out_err:
 	return NULL;
 }
 
@@ -577,4 +574,17 @@ static void die(const char *reason)
 {
 	fprintf(stderr, "%s - errno: %d\n", reason, errno);
 	exit(EXIT_FAILURE);
+}
+
+static int parse_ipaddr(struct sockaddr_in *saddr, const char *ip)
+{
+	uint8_t *addr = (uint8_t *)&saddr->sin_addr.s_addr;
+	size_t buflen = strlen(ip);
+
+	if (buflen > INET_ADDRSTRLEN)
+		return -EINVAL;
+	if (inet_pton(AF_INET, ip, addr) == 0)
+		return -EINVAL;
+	saddr->sin_family = AF_INET;
+	return 0;
 }
