@@ -11,13 +11,24 @@
 			die("error: " #x " failed (returned zero/null)."); \
 	} while (0)
 
+#define bench_start()                            \
+	cycles_low_start = 0, cycles_high_start = 0; \
+	cycles_low_end = 0, cycles_high_end = 0;     \
+	helpers::timer_start(&cycles_high_start, &cycles_low_start);
+
+#define bench_end(title)                                   \
+	helpers::timer_end(&cycles_high_end, &cycles_low_end); \
+	printf("%s: \t\t %ld\n", #title, helpers::get_elapsed_cycles(cycles_high_start, cycles_low_start, cycles_high_end, cycles_low_end));
+
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <rdma/rdma_cma.h>
 
+#include "helpers.hpp"
 #include "rdma_client.hpp"
 
 const char *RDMA_SERVER_IP = "128.110.218.157"; // IP that the RDMA server is listening on
+const size_t BUFFER_SIZE = 1 << 16;				// MAX DATA_LEN
 
 #define CONNECTION_TIMEOUT_MS 2000
 #define QP_MAX_RECV_WR 4
@@ -43,6 +54,9 @@ struct rdma_queue
 	struct ibv_cq *cq;
 
 	struct rdma_client *client;
+
+	void *buffer;
+	struct ibv_mr *localmr;
 	memregion_t *servermr;
 
 	struct rdma_cm_id *cm_id;
@@ -94,26 +108,22 @@ struct rdma_client *start_rdma_client()
 
 int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *data_buf)
 {
+	// unsigned total_cycles_low_start = 0, total_cycles_high_start = 0;
+	// unsigned total_cycles_low_end = 0, total_cycles_high_end = 0;
+	// helpers::timer_start(&total_cycles_high_start, &total_cycles_low_start);
+
+	// unsigned cycles_low_start, cycles_high_start;
+	// unsigned cycles_low_end, cycles_high_end;
+	// bench_start();
+
 	struct ibv_wc wc;
 	struct ibv_sge client_send_sge;
 	struct ibv_send_wr client_send_wr, *bad_client_send_wr = NULL;
-	struct ibv_mr *client_dst_mr;
 	int ret = -1;
 
-	struct rdma_device *rdev = get_device(queue);
-	TEST_Z(rdev);
-
-	client_dst_mr = ibv_reg_mr(rdev->pd,
-							   (void *)data_buf,
-							   (uint32_t)data_len,
-							   (IBV_ACCESS_LOCAL_WRITE |
-								IBV_ACCESS_REMOTE_WRITE |
-								IBV_ACCESS_REMOTE_READ));
-	TEST_Z(client_dst_mr);
-
-	client_send_sge.addr = (uint64_t)client_dst_mr->addr;
-	client_send_sge.length = (uint32_t)client_dst_mr->length;
-	client_send_sge.lkey = client_dst_mr->lkey;
+	client_send_sge.addr = (uint64_t)queue->localmr->addr;
+	client_send_sge.length = (uint32_t)data_len;
+	client_send_sge.lkey = queue->localmr->lkey;
 
 	bzero(&client_send_wr, sizeof(client_send_wr));
 	client_send_wr.sg_list = &client_send_sge;
@@ -132,6 +142,9 @@ int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *
 		return ret;
 	}
 
+	// bench_end(build wr);
+	// bench_start();
+
 	do
 	{
 		ret = ibv_poll_cq(queue->cq, 1, &wc);
@@ -145,35 +158,52 @@ int rdma_read(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, uint8_t *
 		return -1;
 	}
 
+	// bench_end(polling cq);
+	// bench_start();
+
+	memcpy(data_buf, queue->localmr->addr, data_len);
+
+	// bench_end(memcopy);
+	// bench_start();
+
 	ibv_ack_cq_events(queue->cq, 1);
-	ibv_dereg_mr(client_dst_mr);
+
+	// bench_end(ack_cq);
+	// printf("\n");
+
+	// helpers::timer_end(&total_cycles_high_end, &total_cycles_low_end);
+	// printf("%s total: \t %ld\n\n", __FUNCTION__,
+	// 	   helpers::get_elapsed_cycles(
+	// 		   total_cycles_high_start, total_cycles_low_start, total_cycles_high_end, total_cycles_low_end));
+
 	return 0;
 }
 
 int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, const uint8_t *data_buf)
 {
+	// unsigned total_cycles_low_start = 0, total_cycles_high_start = 0;
+	// unsigned total_cycles_low_end = 0, total_cycles_high_end = 0;
+	// helpers::timer_start(&total_cycles_high_start, &total_cycles_low_start);
+
+	// unsigned cycles_low_start, cycles_high_start;
+	// unsigned cycles_low_end, cycles_high_end;
+	// bench_start();
+
 	struct ibv_wc wc;
 	struct ibv_sge client_send_sge;
 	struct ibv_send_wr client_send_wr, *bad_client_send_wr = NULL;
-	struct ibv_mr *client_send_mr;
 	int ret = -1;
 
-	struct rdma_device *rdev = get_device(queue);
-	TEST_Z(rdev);
+	memcpy(queue->localmr->addr, data_buf, data_len);
 
-	client_send_mr = ibv_reg_mr(rdev->pd,
-								(void *)data_buf,
-								(uint32_t)data_len,
-								(IBV_ACCESS_LOCAL_WRITE |
-								 IBV_ACCESS_REMOTE_WRITE |
-								 IBV_ACCESS_REMOTE_READ));
-	TEST_Z(client_send_mr);
+	// bench_end(memcopy);
+	// bench_start();
 
-	client_send_sge.addr = (uint64_t)client_send_mr->addr;
-	client_send_sge.length = (uint32_t)client_send_mr->length;
-	client_send_sge.lkey = client_send_mr->lkey;
-
+	client_send_sge.addr = (uint64_t)queue->localmr->addr;
+	client_send_sge.length = (uint32_t)data_len;
+	client_send_sge.lkey = queue->localmr->lkey;
 	bzero(&client_send_wr, sizeof(client_send_wr));
+
 	client_send_wr.sg_list = &client_send_sge;
 	client_send_wr.num_sge = 1;
 	client_send_wr.opcode = IBV_WR_RDMA_WRITE;
@@ -190,6 +220,9 @@ int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, const ui
 		return ret;
 	}
 
+	// bench_end(build wr);
+	// bench_start();
+
 	do
 	{
 		ret = ibv_poll_cq(queue->cq, 1, &wc);
@@ -203,8 +236,19 @@ int rdma_write(rdma_queue_t *queue, uint64_t offset, uint16_t data_len, const ui
 		return -1;
 	}
 
+	// bench_end(polling cq);
+	// bench_start();
+
 	ibv_ack_cq_events(queue->cq, 1);
-	ibv_dereg_mr(client_send_mr);
+
+	// bench_end(ack_cq);
+	// printf("\n");
+
+	// helpers::timer_end(&total_cycles_high_end, &total_cycles_low_end);
+	// printf("%s total: \t %ld\n\n", __FUNCTION__,
+	// 	   helpers::get_elapsed_cycles(
+	// 		   total_cycles_high_start, total_cycles_low_start, total_cycles_high_end, total_cycles_low_end));
+
 	return 0;
 }
 
@@ -216,10 +260,12 @@ int destroy_client(struct rdma_client *client)
 	for (int i = 0; i < client->num_queues; i++)
 	{
 		queue = &client->queues[i];
+		ibv_dereg_mr(queue->localmr);
 		rdma_disconnect(queue->cm_id);
 		destroy_queue_ib(queue);
 		rdma_destroy_id(queue->cm_id);
 		free(queue->servermr);
+		free(queue->buffer);
 	}
 
 	if (client->rdev)
@@ -408,6 +454,18 @@ static int init_queue(struct rdma_client *client, int idx)
 	}
 	// printf("servermr baseaddr= %ld, key= %d\n", queue->servermr->baseaddr, queue->servermr->key);
 
+	/* Prepare local buffer and register mr. */
+	queue->buffer = malloc(BUFFER_SIZE);
+	TEST_Z(queue->buffer);
+
+	queue->localmr = ibv_reg_mr(rdev->pd,
+								(void *)queue->buffer,
+								(uint32_t)BUFFER_SIZE,
+								(IBV_ACCESS_LOCAL_WRITE |
+								 IBV_ACCESS_REMOTE_WRITE |
+								 IBV_ACCESS_REMOTE_READ));
+	TEST_Z(queue->localmr);
+
 	TEST_NZ(rdma_ack_cm_event(event));
 
 	// printf("queue[%d] initialized successfully\n", idx);
@@ -449,7 +507,7 @@ static void destroy_queue_ib(struct rdma_queue *q)
 {
 	rdma_destroy_qp(q->cm_id);
 	/* NOTE(Qing): There is a bug here that sporadically ibv_destroy_cq never returns. */
-	// ibv_destroy_cq(q->cq);
+	// ibv_destroy_cq(q->cq); // May cause mem leak but should be fine, we are terminating the client anyway.
 }
 
 static int create_queue_ib(struct rdma_queue *q)
