@@ -1,3 +1,7 @@
+# Adding RDMA to AIFM
+
+This is our final project for MIT 6.5810 (formly 6.828) Operating Systems Engineering, implementing an RDMA data transfer backend for AIFM. Benchmarks show AIFM with our RDMA backend demonstrates up to 2.1x speedup on 64B objects and approximately 1.25x speedup on 4KB objects, compared with the TCP alternative.
+
 # AIFM
 ![Status](https://img.shields.io/badge/Version-Experimental-green.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
